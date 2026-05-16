@@ -114,3 +114,28 @@ Lenh nay build ca installer va portable.
    - Dong process build cu, chay lai.
 4. App khong mo:
    - Thu `npm.cmd run tauri:dev` de xem log.
+
+## 10) CI/CD (GitHub Actions)
+
+Workflow: `.github/workflows/ci-release.yml`
+
+- Khi `push` / `pull_request` vao `main`:
+  - Chay `npm ci`
+  - Chay `npm run build`
+  - Chay `cargo check`
+  - Chay `cargo test`
+
+- Khi push tag `v*` (vi du: `v1.0.1`):
+  - Chay full validate
+  - Build Windows installer + portable
+  - Upload artifacts:
+    - `windows-nsis`
+    - `windows-msi`
+    - `windows-portable-exe`
+
+Lenh tao tag va trigger release build:
+
+```powershell
+git tag -a v1.0.1 -m "Release v1.0.1"
+git push origin v1.0.1
+```
