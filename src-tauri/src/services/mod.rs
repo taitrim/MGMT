@@ -4,6 +4,7 @@ use chrono::Utc;
 use uuid::Uuid;
 use rand::Rng;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use std::collections::HashMap;
 
 use crate::crypto::CryptoService;
 use crate::database::Database;
@@ -37,6 +38,7 @@ pub struct VaultService {
     current_user_id: Arc<RwLock<Option<String>>>,
     current_vault_id: Arc<RwLock<Option<String>>>,
     session_expires_at: Arc<RwLock<Option<chrono::DateTime<Utc>>>>,
+    search_cache: Arc<RwLock<HashMap<String, Vec<Account>>>>,
 }
 
 impl VaultService {
@@ -126,7 +128,12 @@ impl VaultService {
             current_user_id: Arc::new(RwLock::new(None)),
             current_vault_id: Arc::new(RwLock::new(None)),
             session_expires_at: Arc::new(RwLock::new(None)),
+            search_cache: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    fn invalidate_search_cache(&self) {
+        self.search_cache.write().clear();
     }
 
     pub fn is_unlocked(&self) -> bool {
@@ -241,6 +248,7 @@ impl VaultService {
         *self.current_user_id.write() = None;
         *self.current_vault_id.write() = None;
         *self.session_expires_at.write() = None;
+        self.invalidate_search_cache();
     }
 
     pub fn extend_session(&self) -> AppResult<()> {
@@ -439,6 +447,7 @@ impl VaultService {
         };
         self.db.add_audit_log(&audit_log)?;
 
+        self.invalidate_search_cache();
         account.name = name;
         Ok(account)
     }
@@ -522,6 +531,7 @@ impl VaultService {
             self.db.add_audit_log(&audit_log)?;
         }
 
+        self.invalidate_search_cache();
         Ok(())
     }
 
@@ -542,6 +552,7 @@ impl VaultService {
         };
         self.db.add_audit_log(&audit_log)?;
 
+        self.invalidate_search_cache();
         Ok(())
     }
 
@@ -654,6 +665,10 @@ impl VaultService {
             return self.get_accounts();
         }
 
+        if let Some(cached) = self.search_cache.read().get(&q).cloned() {
+            return Ok(cached);
+        }
+
         let vault_id = self.get_current_vault_id()?;
         let customers = self.get_customers()?;
         let customer_map = customers
@@ -690,6 +705,7 @@ impl VaultService {
         result.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
         // Avoid unused var warning in case future DB fallback is needed
         let _ = vault_id;
+        self.search_cache.write().insert(q, result.clone());
         Ok(result)
     }
 
@@ -829,6 +845,7 @@ impl VaultService {
             is_deleted: false,
         };
         self.db.create_customer(&customer)?;
+        self.invalidate_search_cache();
         Ok(Customer {
             contact: customer.contact.as_ref().map(|c| self.decrypt_metadata_compat(c)),
             notes: customer.notes.as_ref().map(|n| self.decrypt_metadata_compat(n)),
@@ -838,7 +855,9 @@ impl VaultService {
 
     pub fn delete_customer(&self, id: &str) -> AppResult<()> {
         self.check_session()?;
-        self.db.delete_customer(id)
+        self.db.delete_customer(id)?;
+        self.invalidate_search_cache();
+        Ok(())
     }
 
     pub fn has_user(&self) -> AppResult<bool> {

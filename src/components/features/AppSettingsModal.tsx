@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { X, FolderOpen, Save } from 'lucide-react'
+import { X, FolderOpen, Save, RefreshCw } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 
 interface AppSettingsModalProps {
@@ -8,7 +8,7 @@ interface AppSettingsModalProps {
 }
 
 export function AppSettingsModal({ onClose }: AppSettingsModalProps) {
-  const { storageInfo, setStoragePath, openDataDirectory } = useAuthStore()
+  const { storageInfo, dbHealth, checkDbHealth, setStoragePath, openDataDirectory } = useAuthStore()
   const [dbPath, setDbPath] = useState(storageInfo?.db_path || '')
   const [isSaving, setIsSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -25,6 +25,10 @@ export function AppSettingsModal({ onClose }: AppSettingsModalProps) {
       setIsSaving(false)
     }
   }
+
+  const healthStatus =
+    !dbHealth ? 'Unknown' : (!dbHealth.exists ? 'Missing DB file' : (dbHealth.quick_ok && dbHealth.integrity_ok ? 'Healthy' : 'Corrupted'))
+  const hasDbIssue = !!dbHealth && (!dbHealth.exists || !dbHealth.quick_ok || !dbHealth.integrity_ok)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
@@ -45,6 +49,46 @@ export function AppSettingsModal({ onClose }: AppSettingsModalProps) {
           <div className="text-xs text-text-tertiary">
             Mode: {storageInfo?.mode || '-'}
           </div>
+          <div className="bg-bg-tertiary border border-border-subtle rounded-xl p-3 text-xs text-text-secondary space-y-1">
+            <div className="flex items-center justify-between">
+              <span>DB Health</span>
+              <span className={healthStatus === 'Healthy' ? 'text-emerald-400' : 'text-red-400'}>{healthStatus}</span>
+            </div>
+            <div>Pages: {dbHealth?.page_count ?? '-'}</div>
+            <div>File: {dbHealth?.db_path || '-'}</div>
+            <button
+              onClick={() => checkDbHealth()}
+              className="mt-2 px-2 py-1 rounded bg-bg-primary border border-border-subtle hover:bg-bg-hover flex items-center gap-1"
+            >
+              <RefreshCw className="w-3 h-3" />
+              Re-check DB health
+            </button>
+          </div>
+          {hasDbIssue && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-xs text-red-200 space-y-2">
+              <p className="font-semibold">DB issue detected</p>
+              <p>Recommended actions:</p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>Open data folder and backup your vault file immediately.</li>
+                <li>Run health check again.</li>
+                <li>If still failing, restore from a verified backup (dry-run first).</li>
+              </ol>
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => openDataDirectory()}
+                  className="px-2 py-1 rounded bg-red-900/40 border border-red-400/30 hover:bg-red-900/60"
+                >
+                  Open data folder
+                </button>
+                <button
+                  onClick={() => checkDbHealth()}
+                  className="px-2 py-1 rounded bg-red-900/40 border border-red-400/30 hover:bg-red-900/60"
+                >
+                  Re-check
+                </button>
+              </div>
+            </div>
+          )}
           <div>
             <label className="text-sm text-text-secondary block mb-1">Database path</label>
             <input
@@ -76,4 +120,3 @@ export function AppSettingsModal({ onClose }: AppSettingsModalProps) {
     </div>
   )
 }
-

@@ -84,14 +84,15 @@ export function Dashboard() {
       : []
 
   useEffect(() => {
-    const run = async () => {
+    const timer = setTimeout(async () => {
       if (!searchQuery.trim()) {
         await fetchAccounts()
         return
       }
       await searchAccounts(searchQuery)
-    }
-    run()
+    }, 300)
+
+    return () => clearTimeout(timer)
   }, [searchQuery, searchAccounts, fetchAccounts])
 
   const now = new Date()
