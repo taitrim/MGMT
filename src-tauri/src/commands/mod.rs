@@ -2,6 +2,7 @@ use tauri::State;
 use serde::{Deserialize, Serialize};
 use directories::ProjectDirs;
 use std::process::Command;
+use std::path::PathBuf;
 
 use crate::models::*;
 use crate::services::{DbHealthResult, ImportDryRunResult, VaultService};
@@ -14,14 +15,29 @@ pub struct AppStorageInfo {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct DatabasePathItem {
+    pub name: String,
+    pub path: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SetupRequest {
     pub display_name: String,
     pub master_password: String,
+    pub admin_username: Option<String>,
+    pub admin_password: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UnlockRequest {
+    pub identifier: Option<String>,
     pub master_password: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChangeMasterPasswordRequest {
+    pub current_password: String,
+    pub new_password: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -54,8 +70,50 @@ pub struct CreateCustomerRequest {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct CreateAccessUserRequest {
+    pub name: String,
+    pub email: Option<String>,
+    pub role: String,
+    pub password: String,
+    pub category_permissions: Option<Vec<String>>,
+    pub can_view_password: Option<bool>,
+    pub can_create_account: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateAccessUserRequest {
+    pub id: String,
+    pub name: String,
+    pub email: Option<String>,
+    pub role: String,
+    pub is_active: bool,
+    pub category_permissions: Option<Vec<String>>,
+    pub can_view_password: Option<bool>,
+    pub can_create_account: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChangeAccessUserPasswordRequest {
+    pub id: String,
+    pub new_password: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VerifyCurrentAccessUserPasswordRequest {
+    pub password: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct UpdateAccountTypeRequest {
     pub id: String,
+    pub name: String,
+    pub icon: Option<String>,
+    pub color: Option<String>,
+    pub fields: Vec<FieldDefinition>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AccountTypeTemplate {
     pub name: String,
     pub icon: Option<String>,
     pub color: Option<String>,
@@ -76,12 +134,27 @@ pub async fn check_has_user(vault: State<'_, VaultService>) -> Result<bool, AppE
 
 #[tauri::command]
 pub async fn setup_vault(vault: State<'_, VaultService>, request: SetupRequest) -> Result<(), AppError> {
-    vault.setup(&request.display_name, &request.master_password)
+    vault.setup(
+        &request.display_name,
+        &request.master_password,
+        request.admin_username,
+        request.admin_password,
+    )
 }
 
 #[tauri::command]
 pub async fn unlock_vault(vault: State<'_, VaultService>, request: UnlockRequest) -> Result<User, AppError> {
+    if let Some(identifier) = request.identifier {
+        if !identifier.trim().is_empty() {
+            return vault.unlock_with_access_user(identifier.trim(), &request.master_password);
+        }
+    }
     vault.unlock(&request.master_password)
+}
+
+#[tauri::command]
+pub async fn change_master_password(vault: State<'_, VaultService>, request: ChangeMasterPasswordRequest) -> Result<(), AppError> {
+    vault.change_master_password(&request.current_password, &request.new_password)
 }
 
 #[tauri::command]
@@ -194,6 +267,16 @@ pub async fn delete_account_type(vault: State<'_, VaultService>, id: String) -> 
 }
 
 #[tauri::command]
+pub async fn export_account_type_templates(vault: State<'_, VaultService>, dest_path: String) -> Result<(), AppError> {
+    vault.export_account_type_templates(std::path::PathBuf::from(dest_path))
+}
+
+#[tauri::command]
+pub async fn import_account_type_templates(vault: State<'_, VaultService>, src_path: String) -> Result<i64, AppError> {
+    vault.import_account_type_templates(std::path::PathBuf::from(src_path))
+}
+
+#[tauri::command]
 pub async fn get_account_type_field_usage_count(vault: State<'_, VaultService>, account_type_id: String, field_key: String) -> Result<i64, AppError> {
     vault.get_account_type_field_usage_count(&account_type_id, &field_key)
 }
@@ -284,6 +367,58 @@ pub async fn delete_customer(vault: State<'_, VaultService>, id: String) -> Resu
 }
 
 #[tauri::command]
+pub async fn get_access_users(vault: State<'_, VaultService>) -> Result<Vec<AccessUser>, AppError> {
+    vault.get_access_users()
+}
+
+#[tauri::command]
+pub async fn create_access_user(vault: State<'_, VaultService>, request: CreateAccessUserRequest) -> Result<AccessUser, AppError> {
+    vault.create_access_user(
+        request.name,
+        request.email,
+        request.role,
+        request.password,
+        request.category_permissions.unwrap_or_default(),
+        request.can_view_password.unwrap_or(false),
+        request.can_create_account.unwrap_or(false),
+    )
+}
+
+#[tauri::command]
+pub async fn update_access_user(vault: State<'_, VaultService>, request: UpdateAccessUserRequest) -> Result<(), AppError> {
+    vault.update_access_user(
+        &request.id,
+        request.name,
+        request.email,
+        request.role,
+        request.is_active,
+        request.category_permissions.unwrap_or_default(),
+        request.can_view_password.unwrap_or(false),
+        request.can_create_account.unwrap_or(false),
+    )
+}
+
+#[tauri::command]
+pub async fn delete_access_user(vault: State<'_, VaultService>, id: String) -> Result<(), AppError> {
+    vault.delete_access_user(&id)
+}
+
+#[tauri::command]
+pub async fn change_access_user_password(vault: State<'_, VaultService>, request: ChangeAccessUserPasswordRequest) -> Result<(), AppError> {
+    vault.change_access_user_password(&request.id, request.new_password)
+}
+
+#[tauri::command]
+pub async fn get_current_access_user(vault: State<'_, VaultService>) -> Result<Option<AccessUser>, AppError> {
+    vault.get_current_access_user()
+}
+
+#[tauri::command]
+pub async fn verify_current_access_user_password(vault: State<'_, VaultService>, request: VerifyCurrentAccessUserPasswordRequest) -> Result<bool, AppError> {
+    vault.verify_current_access_user_password(&request.password)
+}
+
+#[tauri::command]
 pub async fn get_app_storage_info(vault: State<'_, VaultService>) -> Result<AppStorageInfo, AppError> {
     Ok(AppStorageInfo {
         mode: vault.get_storage_mode(),
@@ -292,7 +427,8 @@ pub async fn get_app_storage_info(vault: State<'_, VaultService>) -> Result<AppS
 }
 
 #[tauri::command]
-pub async fn set_app_storage_path(db_path: String) -> Result<(), AppError> {
+pub async fn set_app_storage_path(vault: State<'_, VaultService>, db_path: String) -> Result<(), AppError> {
+    vault.ensure_owner_or_admin()?;
     let db_file = std::path::PathBuf::from(db_path);
     let config_path = if std::env::var("SECUREVAULT_PORTABLE").ok().as_deref() == Some("1") {
         let base_dir = std::env::current_exe()
@@ -311,6 +447,60 @@ pub async fn set_app_storage_path(db_path: String) -> Result<(), AppError> {
     let payload = serde_json::json!({ "db_path": db_file.to_string_lossy().to_string() });
     std::fs::write(config_path, serde_json::to_string_pretty(&payload)?)?;
     Ok(())
+}
+
+#[tauri::command]
+pub async fn list_app_databases(vault: State<'_, VaultService>) -> Result<Vec<DatabasePathItem>, AppError> {
+    vault.ensure_owner_or_admin()?;
+    let db_path = vault.get_db_path();
+    let parent = db_path
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."));
+    let mut out = Vec::new();
+    if parent.exists() {
+        for entry in std::fs::read_dir(parent)? {
+            let entry = entry?;
+            let p = entry.path();
+            if p.is_file() && p.extension().and_then(|e| e.to_str()).map(|e| e.eq_ignore_ascii_case("db")).unwrap_or(false) {
+                let name = p.file_stem().and_then(|s| s.to_str()).unwrap_or("vault").to_string();
+                out.push(DatabasePathItem {
+                    name,
+                    path: p.to_string_lossy().to_string(),
+                });
+            }
+        }
+    }
+    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    Ok(out)
+}
+
+#[tauri::command]
+pub async fn create_app_database(vault: State<'_, VaultService>, name: String) -> Result<DatabasePathItem, AppError> {
+    vault.ensure_owner_or_admin()?;
+    let base = vault.get_db_path();
+    let parent = base
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."));
+    std::fs::create_dir_all(&parent)?;
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::InvalidOperation("Database name is required".to_string()));
+    }
+    let safe_name: String = trimmed
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .collect();
+    let file_name = format!("{}.db", safe_name);
+    let db_path = parent.join(file_name);
+    if !db_path.exists() {
+        let _conn = rusqlite::Connection::open(&db_path)?;
+    }
+    Ok(DatabasePathItem {
+        name: safe_name,
+        path: db_path.to_string_lossy().to_string(),
+    })
 }
 
 #[tauri::command]

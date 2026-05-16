@@ -11,6 +11,8 @@ export interface Account {
   tags: string[]
   has_expiry: boolean
   expires_at: string | null
+  updated_by_access_user_id: string | null
+  updated_by_access_user_name: string | null
   created_at: string
   updated_at: string
   deleted_at: string | null
@@ -72,10 +74,24 @@ export interface Customer {
   is_deleted: boolean
 }
 
+export interface AccessUser {
+  id: string
+  vault_id: string
+  name: string
+  email: string | null
+  role: 'owner' | 'admin' | 'editor' | 'viewer'
+  is_active: boolean
+  category_permissions: string[]
+  can_view_password: boolean
+  can_create_account: boolean
+  created_at: string
+}
+
 interface VaultState {
   accounts: Account[]
   accountTypes: AccountType[]
   customers: Customer[]
+  accessUsers: AccessUser[]
   selectedAccount: Account | null
   stats: VaultStats | null
   isLoading: boolean
@@ -87,6 +103,19 @@ interface VaultState {
   fetchCustomers: () => Promise<void>
   createCustomer: (name: string, contact?: string, notes?: string) => Promise<void>
   deleteCustomer: (id: string) => Promise<void>
+  fetchAccessUsers: () => Promise<void>
+  createAccessUser: (
+    name: string,
+    email: string | null,
+    role: AccessUser['role'],
+    password: string,
+    categoryPermissions?: string[],
+    canViewPassword?: boolean,
+    canCreateAccount?: boolean
+  ) => Promise<void>
+  updateAccessUser: (user: AccessUser) => Promise<void>
+  deleteAccessUser: (id: string) => Promise<void>
+  changeAccessUserPassword: (id: string, newPassword: string) => Promise<void>
   createAccount: (name: string, customerId: string | null, typeId: string | null, fields: FieldValue[], hasExpiry?: boolean, expiresAt?: string | null) => Promise<void>
   updateAccount: (id: string, updates: Partial<Account>, fields?: FieldValue[]) => Promise<void>
   deleteAccount: (id: string) => Promise<void>
@@ -101,6 +130,8 @@ interface VaultState {
   updateAccountType: (id: string, name: string, icon: string | null, color: string | null, fields: FieldDefinition[]) => Promise<void>
   deleteAccountType: (id: string) => Promise<void>
   getAccountTypeFieldUsageCount: (accountTypeId: string, fieldKey: string) => Promise<number>
+  exportAccountTypeTemplates: (destPath: string) => Promise<void>
+  importAccountTypeTemplates: (srcPath: string) => Promise<number>
   exportVault: (destPath: string) => Promise<void>
   importVault: (srcPath: string) => Promise<void>
   importVaultDryRun: (srcPath: string) => Promise<ImportDryRunResult>
@@ -110,6 +141,7 @@ export const useVaultStore = create<VaultState>((set, get) => ({
   accounts: [],
   accountTypes: [],
   customers: [],
+  accessUsers: [],
   selectedAccount: null,
   stats: null,
   isLoading: false,
@@ -173,6 +205,65 @@ export const useVaultStore = create<VaultState>((set, get) => ({
       set({ error: String(error) })
       throw error
     }
+  },
+
+  fetchAccessUsers: async () => {
+    try {
+      const accessUsers = await invoke<AccessUser[]>('get_access_users')
+      set({ accessUsers })
+    } catch (error) {
+      set({ error: String(error) })
+    }
+  },
+
+  createAccessUser: async (
+    name: string,
+    email: string | null,
+    role: AccessUser['role'],
+    password: string,
+    categoryPermissions: string[] = [],
+    canViewPassword = false,
+    canCreateAccount = false
+  ) => {
+    await invoke('create_access_user', {
+      request: {
+        name,
+        email,
+        role,
+        password,
+        category_permissions: categoryPermissions,
+        can_view_password: canViewPassword,
+        can_create_account: canCreateAccount
+      }
+    })
+    await get().fetchAccessUsers()
+  },
+
+  updateAccessUser: async (user: AccessUser) => {
+    await invoke('update_access_user', {
+      request: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        is_active: user.is_active,
+        category_permissions: user.category_permissions,
+        can_view_password: user.can_view_password,
+        can_create_account: user.can_create_account,
+      }
+    })
+    await get().fetchAccessUsers()
+  },
+
+  deleteAccessUser: async (id: string) => {
+    await invoke('delete_access_user', { id })
+    await get().fetchAccessUsers()
+  },
+
+  changeAccessUserPassword: async (id: string, newPassword: string) => {
+    await invoke('change_access_user_password', {
+      request: { id, new_password: newPassword }
+    })
   },
 
   createAccount: async (name: string, customerId: string | null, typeId: string | null, fields: FieldValue[], hasExpiry = false, expiresAt = null) => {
@@ -341,6 +432,26 @@ export const useVaultStore = create<VaultState>((set, get) => ({
         accountTypeId,
         fieldKey
       })
+    } catch (error) {
+      set({ error: String(error) })
+      throw error
+    }
+  },
+
+  exportAccountTypeTemplates: async (destPath: string) => {
+    try {
+      await invoke('export_account_type_templates', { destPath })
+    } catch (error) {
+      set({ error: String(error) })
+      throw error
+    }
+  },
+
+  importAccountTypeTemplates: async (srcPath: string) => {
+    try {
+      const imported = await invoke<number>('import_account_type_templates', { srcPath })
+      await get().fetchAccountTypes()
+      return imported
     } catch (error) {
       set({ error: String(error) })
       throw error

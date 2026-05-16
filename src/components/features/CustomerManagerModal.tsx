@@ -22,7 +22,7 @@ export function CustomerManagerModal({ onClose }: CustomerManagerModalProps) {
 
   const handleCreate = async () => {
     if (!name.trim()) {
-      setError(t(language, 'Customer name is required', 'Ten khach hang la bat buoc'))
+      setError(t(language, 'Customer name is required', 'Tên khách hàng là bắt buộc'))
       return
     }
     try {
@@ -59,7 +59,7 @@ export function CustomerManagerModal({ onClose }: CustomerManagerModalProps) {
 
         <div className="p-6 border-b border-border-subtle space-y-3">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t(language, 'Customer name', 'Ten khach hang')} className="bg-bg-tertiary border border-border-subtle rounded-xl px-3 py-2 text-text-primary" />
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t(language, 'Customer name', 'Tên khách hàng')} className="bg-bg-tertiary border border-border-subtle rounded-xl px-3 py-2 text-text-primary" />
             <input value={contact} onChange={(e) => setContact(e.target.value)} placeholder={t(language, 'Contact', 'Liên hệ')} className="bg-bg-tertiary border border-border-subtle rounded-xl px-3 py-2 text-text-primary" />
             <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t(language, 'Notes', 'Ghi chú')} className="bg-bg-tertiary border border-border-subtle rounded-xl px-3 py-2 text-text-primary" />
           </div>

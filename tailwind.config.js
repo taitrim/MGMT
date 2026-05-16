@@ -9,25 +9,25 @@ export default {
     extend: {
       colors: {
         bg: {
-          primary: '#0a0a0b',
-          secondary: '#111113',
-          tertiary: '#18181b',
-          elevated: '#1c1c1f',
-          hover: '#27272a',
+          primary: 'var(--bg-primary)',
+          secondary: 'var(--bg-secondary)',
+          tertiary: 'var(--bg-tertiary)',
+          elevated: 'var(--bg-elevated)',
+          hover: 'var(--bg-hover)',
         },
         text: {
-          primary: '#fafafa',
-          secondary: '#a1a1aa',
-          tertiary: '#71717a',
+          primary: 'var(--text-primary)',
+          secondary: 'var(--text-secondary)',
+          tertiary: 'var(--text-tertiary)',
         },
         accent: {
-          primary: '#10b981',
-          'primary-hover': '#34d399',
-          secondary: '#6366f1',
+          primary: 'var(--accent-primary)',
+          'primary-hover': 'var(--accent-primary-hover)',
+          secondary: 'var(--accent-secondary)',
         },
         border: {
-          subtle: '#27272a',
-          default: '#3f3f46',
+          subtle: 'var(--border-subtle)',
+          default: 'var(--border-default)',
         },
       },
       fontFamily: {

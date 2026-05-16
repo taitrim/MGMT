@@ -12,6 +12,8 @@ import {
   FileKey,
   Folder,
   Star,
+  AlertTriangle,
+  Clock3,
   History,
   Settings,
   SlidersHorizontal,
@@ -40,12 +42,18 @@ interface SidebarProps {
   onCreateAccount: () => void
   onManageCustomers: () => void
   onManageTypes: () => void
+  onManageAccessUsers: () => void
   onOpenSettings: () => void
+  canManageAccessUsers?: boolean
+  canManageSecurity?: boolean
+  canCreateAccount?: boolean
 }
 
 const navItems = [
   { id: 'all', en: 'All Items', vi: 'Tất cả mục', icon: Folder },
   { id: 'favorites', en: 'Favorites', vi: 'Yêu thích', icon: Star },
+  { id: 'expiring', en: 'Expiring Soon', vi: 'Sắp hết hạn', icon: Clock3 },
+  { id: 'expired', en: 'Expired', vi: 'Đã hết hạn', icon: AlertTriangle },
   { id: 'my_accounts', en: 'My Accounts', vi: 'Tài khoản của tôi', icon: UserCircle2 },
   { id: 'customers', en: 'Customers', vi: 'Khách hàng', icon: Users },
   { id: 'server', en: 'Servers', vi: 'Máy chủ', icon: Server },
@@ -69,7 +77,11 @@ export function Sidebar({
   onCreateAccount,
   onManageCustomers,
   onManageTypes,
+  onManageAccessUsers,
   onOpenSettings,
+  canManageAccessUsers = true,
+  canManageSecurity = true,
+  canCreateAccount = true,
 }: SidebarProps) {
   const [showAuditModal, setShowAuditModal] = useState(false)
   const { language } = useI18nStore()
@@ -84,11 +96,6 @@ export function Sidebar({
           <div>
             <h1 className="font-semibold text-text-primary">SecureVault</h1>
             <p className="text-xs text-text-tertiary">{t(language, 'Password Manager', 'Quản lý mật khẩu')}</p>
-            {storageInfo && (
-              <p className="text-[10px] text-text-tertiary mt-1 truncate" title={storageInfo.db_path}>
-                {storageInfo.mode === 'portable' ? 'Portable' : 'Installed'} | {storageInfo.db_path}
-              </p>
-            )}
             {dbHealth && (!dbHealth.exists || !dbHealth.quick_ok || !dbHealth.integrity_ok) && (
               <p className="text-[10px] text-red-400 mt-1">Cảnh báo: DB health check lỗi</p>
             )}
@@ -139,13 +146,24 @@ export function Sidebar({
             <SlidersHorizontal className="w-4 h-4" />
             <span className="text-sm font-medium">Mẫu trường tài khoản</span>
           </button>
-          <button
-            onClick={onOpenSettings}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors text-left"
-          >
-            <Settings className="w-4 h-4" />
-            <span className="text-sm font-medium">App Settings</span>
-          </button>
+          {canManageAccessUsers && (
+            <button
+              onClick={onManageAccessUsers}
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors text-left"
+            >
+              <Users className="w-4 h-4" />
+              <span className="text-sm font-medium">Phân quyền user</span>
+            </button>
+          )}
+          {canManageSecurity && (
+            <button
+              onClick={onOpenSettings}
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors text-left"
+            >
+              <Settings className="w-4 h-4" />
+              <span className="text-sm font-medium">App Settings</span>
+            </button>
+          )}
         </div>
       </nav>
 
@@ -168,15 +186,17 @@ export function Sidebar({
         </div>
       )}
 
-      <div className="p-4 border-t border-border-subtle">
-        <button
-          onClick={onCreateAccount}
-          className="w-full flex items-center justify-center gap-2 bg-accent-primary hover:bg-accent-primary-hover text-bg-primary font-medium py-2.5 rounded-xl transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          <span>{t(language, 'New Item', 'Mục mới')}</span>
-        </button>
-      </div>
+      {canCreateAccount && (
+        <div className="p-4 border-t border-border-subtle">
+          <button
+            onClick={onCreateAccount}
+            className="w-full flex items-center justify-center gap-2 bg-accent-primary hover:bg-accent-primary-hover text-bg-primary font-medium py-2.5 rounded-xl transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            <span>{t(language, 'New Item', 'Mục mới')}</span>
+          </button>
+        </div>
+      )}
 
       <AnimatePresence>{showAuditModal && <AuditLogModal onClose={() => setShowAuditModal(false)} />}</AnimatePresence>
     </aside>

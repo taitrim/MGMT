@@ -113,6 +113,8 @@ impl Database {
                 tags TEXT,
                 has_expiry INTEGER DEFAULT 0,
                 expires_at TEXT,
+                updated_by_access_user_id TEXT,
+                updated_by_access_user_name TEXT,
                 created_at TEXT DEFAULT (datetime('now')),
                 updated_at TEXT DEFAULT (datetime('now')),
                 deleted_at TEXT,
@@ -176,12 +178,32 @@ impl Database {
                 value TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS access_users (
+                id TEXT PRIMARY KEY,
+                vault_id TEXT NOT NULL REFERENCES vaults(id),
+                name TEXT NOT NULL,
+                email TEXT,
+                role TEXT NOT NULL,
+                is_active INTEGER DEFAULT 1,
+                category_permissions TEXT,
+                can_view_password INTEGER DEFAULT 0,
+                can_create_account INTEGER DEFAULT 0,
+                password_hash TEXT,
+                password_salt TEXT,
+                key_encrypted TEXT,
+                key_nonce TEXT,
+                failed_attempts INTEGER DEFAULT 0,
+                locked_until TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+
             CREATE INDEX IF NOT EXISTS idx_accounts_vault ON accounts(vault_id);
             CREATE INDEX IF NOT EXISTS idx_accounts_type ON accounts(account_type_id);
             CREATE INDEX IF NOT EXISTS idx_customers_vault ON customers(vault_id);
             CREATE INDEX IF NOT EXISTS idx_field_values_account ON field_values(account_id);
             CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user_id);
             CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at);
+            CREATE INDEX IF NOT EXISTS idx_access_users_vault ON access_users(vault_id);
             "#,
         )?;
 
@@ -209,10 +231,98 @@ impl Database {
         if has_expires_at == 0 {
             conn.execute("ALTER TABLE accounts ADD COLUMN expires_at TEXT", [])?;
         }
+        let has_updated_by_access_user_id: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('accounts') WHERE name = 'updated_by_access_user_id'",
+            [],
+            |row| row.get(0),
+        )?;
+        if has_updated_by_access_user_id == 0 {
+            conn.execute("ALTER TABLE accounts ADD COLUMN updated_by_access_user_id TEXT", [])?;
+        }
+        let has_updated_by_access_user_name: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('accounts') WHERE name = 'updated_by_access_user_name'",
+            [],
+            |row| row.get(0),
+        )?;
+        if has_updated_by_access_user_name == 0 {
+            conn.execute("ALTER TABLE accounts ADD COLUMN updated_by_access_user_name TEXT", [])?;
+        }
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_accounts_customer ON accounts(customer_id)",
             [],
         )?;
+        let has_access_password_hash: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('access_users') WHERE name = 'password_hash'",
+            [],
+            |row| row.get(0),
+        )?;
+        if has_access_password_hash == 0 {
+            conn.execute("ALTER TABLE access_users ADD COLUMN password_hash TEXT", [])?;
+        }
+        let has_access_password_salt: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('access_users') WHERE name = 'password_salt'",
+            [],
+            |row| row.get(0),
+        )?;
+        if has_access_password_salt == 0 {
+            conn.execute("ALTER TABLE access_users ADD COLUMN password_salt TEXT", [])?;
+        }
+        let has_access_key_encrypted: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('access_users') WHERE name = 'key_encrypted'",
+            [],
+            |row| row.get(0),
+        )?;
+        if has_access_key_encrypted == 0 {
+            conn.execute("ALTER TABLE access_users ADD COLUMN key_encrypted TEXT", [])?;
+        }
+        let has_access_key_nonce: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('access_users') WHERE name = 'key_nonce'",
+            [],
+            |row| row.get(0),
+        )?;
+        if has_access_key_nonce == 0 {
+            conn.execute("ALTER TABLE access_users ADD COLUMN key_nonce TEXT", [])?;
+        }
+        let has_access_failed_attempts: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('access_users') WHERE name = 'failed_attempts'",
+            [],
+            |row| row.get(0),
+        )?;
+        if has_access_failed_attempts == 0 {
+            conn.execute("ALTER TABLE access_users ADD COLUMN failed_attempts INTEGER DEFAULT 0", [])?;
+        }
+        let has_access_locked_until: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('access_users') WHERE name = 'locked_until'",
+            [],
+            |row| row.get(0),
+        )?;
+        if has_access_locked_until == 0 {
+            conn.execute("ALTER TABLE access_users ADD COLUMN locked_until TEXT", [])?;
+        }
+        let has_access_category_permissions: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('access_users') WHERE name = 'category_permissions'",
+            [],
+            |row| row.get(0),
+        )?;
+        if has_access_category_permissions == 0 {
+            conn.execute("ALTER TABLE access_users ADD COLUMN category_permissions TEXT", [])?;
+        }
+        let has_access_can_view_password: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('access_users') WHERE name = 'can_view_password'",
+            [],
+            |row| row.get(0),
+        )?;
+        if has_access_can_view_password == 0 {
+            conn.execute("ALTER TABLE access_users ADD COLUMN can_view_password INTEGER DEFAULT 0", [])?;
+        }
+        let has_access_can_create_account: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('access_users') WHERE name = 'can_create_account'",
+            [],
+            |row| row.get(0),
+        )?;
+        if has_access_can_create_account == 0 {
+            conn.execute("ALTER TABLE access_users ADD COLUMN can_create_account INTEGER DEFAULT 0", [])?;
+        }
 
         // Migrate legacy SQLite datetime strings (`YYYY-MM-DD HH:MM:SS`) to RFC3339
         // so old data doesn't trigger parsing panics.
@@ -475,6 +585,15 @@ impl Database {
         Ok(())
     }
 
+    pub fn update_user_credentials(&self, user_id: &str, master_key_hash: &str, salt: &str) -> AppResult<()> {
+        let conn = self.conn.lock().map_err(|e| AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string())))?;
+        conn.execute(
+            "UPDATE users SET master_key_hash = ?1, salt = ?2, updated_at = ?3 WHERE id = ?4",
+            params![master_key_hash, salt, Utc::now().to_rfc3339(), user_id],
+        )?;
+        Ok(())
+    }
+
     pub fn create_vault(&self, vault: &Vault) -> AppResult<()> {
         let conn = self.conn.lock().map_err(|e| AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string())))?;
 
@@ -545,7 +664,7 @@ impl Database {
         let conn = self.conn.lock().map_err(|e| AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string())))?;
 
         conn.execute(
-            "INSERT INTO accounts (id, vault_id, customer_id, account_type_id, name, favorite, tags, has_expiry, expires_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            "INSERT INTO accounts (id, vault_id, customer_id, account_type_id, name, favorite, tags, has_expiry, expires_at, updated_by_access_user_id, updated_by_access_user_name, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 account.id,
                 account.vault_id,
@@ -556,6 +675,8 @@ impl Database {
                 serde_json::to_string(&account.tags)?,
                 account.has_expiry as i32,
                 account.expires_at.map(|d| d.to_rfc3339()),
+                account.updated_by_access_user_id,
+                account.updated_by_access_user_name,
                 account.created_at.to_rfc3339(),
                 account.updated_at.to_rfc3339()
             ],
@@ -568,7 +689,7 @@ impl Database {
         let conn = self.conn.lock().map_err(|e| AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string())))?;
 
         let mut stmt = conn.prepare(
-            "SELECT id, vault_id, customer_id, account_type_id, name, favorite, tags, has_expiry, expires_at, created_at, updated_at, deleted_at, is_deleted FROM accounts WHERE vault_id = ?1 AND is_deleted = 0"
+            "SELECT id, vault_id, customer_id, account_type_id, name, favorite, tags, has_expiry, expires_at, updated_by_access_user_id, updated_by_access_user_name, created_at, updated_at, deleted_at, is_deleted FROM accounts WHERE vault_id = ?1 AND is_deleted = 0"
         )?;
 
         let accounts = stmt.query_map(params![vault_id], |row| {
@@ -585,10 +706,12 @@ impl Database {
                 tags,
                 has_expiry: row.get::<_, i32>(7)? != 0,
                 expires_at: parse_optional_datetime(row.get::<_, Option<String>>(8)?),
-                created_at: parse_datetime(&row.get::<_, String>(9)?),
-                updated_at: parse_datetime(&row.get::<_, String>(10)?),
-                deleted_at: parse_optional_datetime(row.get::<_, Option<String>>(11)?),
-                is_deleted: row.get::<_, i32>(12)? != 0,
+                updated_by_access_user_id: row.get(9)?,
+                updated_by_access_user_name: row.get(10)?,
+                created_at: parse_datetime(&row.get::<_, String>(11)?),
+                updated_at: parse_datetime(&row.get::<_, String>(12)?),
+                deleted_at: parse_optional_datetime(row.get::<_, Option<String>>(13)?),
+                is_deleted: row.get::<_, i32>(14)? != 0,
             })
         })?.collect::<Result<Vec<_>, _>>()?;
 
@@ -599,7 +722,7 @@ impl Database {
         let conn = self.conn.lock().map_err(|e| AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string())))?;
 
         let mut stmt = conn.prepare(
-            "SELECT id, vault_id, customer_id, account_type_id, name, favorite, tags, has_expiry, expires_at, created_at, updated_at, deleted_at, is_deleted FROM accounts WHERE id = ?1 AND is_deleted = 0"
+            "SELECT id, vault_id, customer_id, account_type_id, name, favorite, tags, has_expiry, expires_at, updated_by_access_user_id, updated_by_access_user_name, created_at, updated_at, deleted_at, is_deleted FROM accounts WHERE id = ?1 AND is_deleted = 0"
         )?;
 
         let account = stmt.query_row(params![id], |row| {
@@ -616,10 +739,12 @@ impl Database {
                 tags,
                 has_expiry: row.get::<_, i32>(7)? != 0,
                 expires_at: parse_optional_datetime(row.get::<_, Option<String>>(8)?),
-                created_at: parse_datetime(&row.get::<_, String>(9)?),
-                updated_at: parse_datetime(&row.get::<_, String>(10)?),
-                deleted_at: parse_optional_datetime(row.get::<_, Option<String>>(11)?),
-                is_deleted: row.get::<_, i32>(12)? != 0,
+                updated_by_access_user_id: row.get(9)?,
+                updated_by_access_user_name: row.get(10)?,
+                created_at: parse_datetime(&row.get::<_, String>(11)?),
+                updated_at: parse_datetime(&row.get::<_, String>(12)?),
+                deleted_at: parse_optional_datetime(row.get::<_, Option<String>>(13)?),
+                is_deleted: row.get::<_, i32>(14)? != 0,
             })
         }).optional()?;
 
@@ -630,7 +755,7 @@ impl Database {
         let conn = self.conn.lock().map_err(|e| AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string())))?;
 
         conn.execute(
-            "UPDATE accounts SET name = ?1, customer_id = ?2, favorite = ?3, tags = ?4, has_expiry = ?5, expires_at = ?6, updated_at = ?7 WHERE id = ?8",
+            "UPDATE accounts SET name = ?1, customer_id = ?2, favorite = ?3, tags = ?4, has_expiry = ?5, expires_at = ?6, updated_by_access_user_id = ?7, updated_by_access_user_name = ?8, updated_at = ?9 WHERE id = ?10",
             params![
                 account.name,
                 account.customer_id,
@@ -638,6 +763,8 @@ impl Database {
                 serde_json::to_string(&account.tags)?,
                 account.has_expiry as i32,
                 account.expires_at.map(|d| d.to_rfc3339()),
+                account.updated_by_access_user_id,
+                account.updated_by_access_user_name,
                 chrono::Utc::now().to_rfc3339(),
                 account.id
             ],
@@ -872,7 +999,7 @@ impl Database {
         let search_pattern = format!("%{}%", query.to_lowercase());
 
         let mut stmt = conn.prepare(
-            "SELECT id, vault_id, customer_id, account_type_id, name, favorite, tags, has_expiry, expires_at, created_at, updated_at, deleted_at, is_deleted FROM accounts WHERE vault_id = ?1 AND is_deleted = 0 AND LOWER(name) LIKE ?2"
+            "SELECT id, vault_id, customer_id, account_type_id, name, favorite, tags, has_expiry, expires_at, updated_by_access_user_id, updated_by_access_user_name, created_at, updated_at, deleted_at, is_deleted FROM accounts WHERE vault_id = ?1 AND is_deleted = 0 AND LOWER(name) LIKE ?2"
         )?;
 
         let accounts = stmt.query_map(params![vault_id, search_pattern], |row| {
@@ -889,10 +1016,12 @@ impl Database {
                 tags,
                 has_expiry: row.get::<_, i32>(7)? != 0,
                 expires_at: parse_optional_datetime(row.get::<_, Option<String>>(8)?),
-                created_at: parse_datetime(&row.get::<_, String>(9)?),
-                updated_at: parse_datetime(&row.get::<_, String>(10)?),
-                deleted_at: parse_optional_datetime(row.get::<_, Option<String>>(11)?),
-                is_deleted: row.get::<_, i32>(12)? != 0,
+                updated_by_access_user_id: row.get(9)?,
+                updated_by_access_user_name: row.get(10)?,
+                created_at: parse_datetime(&row.get::<_, String>(11)?),
+                updated_at: parse_datetime(&row.get::<_, String>(12)?),
+                deleted_at: parse_optional_datetime(row.get::<_, Option<String>>(13)?),
+                is_deleted: row.get::<_, i32>(14)? != 0,
             })
         })?.collect::<Result<Vec<_>, _>>()?;
 
@@ -939,6 +1068,159 @@ impl Database {
             tags,
             attachments,
         })
+    }
+
+    pub fn get_access_users(&self, vault_id: &str) -> AppResult<Vec<AccessUser>> {
+        let conn = self.conn.lock().map_err(|e| AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string())))?;
+        let mut stmt = conn.prepare(
+            "SELECT id, vault_id, name, email, role, is_active, category_permissions, can_view_password, can_create_account, created_at FROM access_users WHERE vault_id = ?1 ORDER BY created_at ASC"
+        )?;
+        let users = stmt.query_map(params![vault_id], |row| {
+            let permissions_raw: Option<String> = row.get(6)?;
+            let category_permissions = permissions_raw
+                .as_deref()
+                .and_then(|s| serde_json::from_str::<Vec<String>>(s).ok())
+                .unwrap_or_default();
+            Ok(AccessUser {
+                id: row.get(0)?,
+                vault_id: row.get(1)?,
+                name: row.get(2)?,
+                email: row.get(3)?,
+                role: row.get(4)?,
+                is_active: row.get::<_, i32>(5)? != 0,
+                category_permissions,
+                can_view_password: row.get::<_, i32>(7)? != 0,
+                can_create_account: row.get::<_, i32>(8)? != 0,
+                created_at: parse_datetime(&row.get::<_, String>(9)?),
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(users)
+    }
+
+    pub fn create_access_user(&self, user: &AccessUser, password_hash: String, password_salt: String, key_encrypted: String, key_nonce: String) -> AppResult<()> {
+        let conn = self.conn.lock().map_err(|e| AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string())))?;
+        conn.execute(
+            "INSERT INTO access_users (id, vault_id, name, email, role, is_active, category_permissions, can_view_password, can_create_account, password_hash, password_salt, key_encrypted, key_nonce, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+            params![
+                user.id,
+                user.vault_id,
+                user.name,
+                user.email,
+                user.role,
+                user.is_active as i32,
+                serde_json::to_string(&user.category_permissions)?,
+                user.can_view_password as i32,
+                user.can_create_account as i32,
+                password_hash,
+                password_salt,
+                key_encrypted,
+                key_nonce,
+                user.created_at.to_rfc3339()
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_access_user(&self, id: &str, name: String, email: Option<String>, role: String, is_active: bool, category_permissions: Vec<String>, can_view_password: bool, can_create_account: bool) -> AppResult<()> {
+        let conn = self.conn.lock().map_err(|e| AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string())))?;
+        conn.execute(
+            "UPDATE access_users SET name = ?1, email = ?2, role = ?3, is_active = ?4, category_permissions = ?5, can_view_password = ?6, can_create_account = ?7 WHERE id = ?8",
+            params![name, email, role, is_active as i32, serde_json::to_string(&category_permissions)?, can_view_password as i32, can_create_account as i32, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_access_user(&self, id: &str) -> AppResult<()> {
+        let conn = self.conn.lock().map_err(|e| AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string())))?;
+        conn.execute("DELETE FROM access_users WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    pub fn get_access_user_auth_by_identifier(&self, vault_id: &str, identifier: &str) -> AppResult<Option<(AccessUser, String, String, String, String, i32, Option<DateTime<Utc>>)>> {
+        let conn = self.conn.lock().map_err(|e| AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string())))?;
+        let mut stmt = conn.prepare(
+            "SELECT id, vault_id, name, email, role, is_active, category_permissions, can_view_password, can_create_account, created_at, password_hash, password_salt, key_encrypted, key_nonce, failed_attempts, locked_until
+             FROM access_users
+             WHERE vault_id = ?1 AND (LOWER(name) = LOWER(?2) OR LOWER(COALESCE(email, '')) = LOWER(?2))
+             LIMIT 1"
+        )?;
+        let item = stmt.query_row(params![vault_id, identifier], |row| {
+            let permissions_raw: Option<String> = row.get(6)?;
+            let category_permissions = permissions_raw
+                .as_deref()
+                .and_then(|s| serde_json::from_str::<Vec<String>>(s).ok())
+                .unwrap_or_default();
+            Ok((
+                AccessUser {
+                    id: row.get(0)?,
+                    vault_id: row.get(1)?,
+                    name: row.get(2)?,
+                    email: row.get(3)?,
+                    role: row.get(4)?,
+                    is_active: row.get::<_, i32>(5)? != 0,
+                    category_permissions,
+                    can_view_password: row.get::<_, i32>(7)? != 0,
+                    can_create_account: row.get::<_, i32>(8)? != 0,
+                    created_at: parse_datetime(&row.get::<_, String>(9)?),
+                },
+                row.get(10)?,
+                row.get(11)?,
+                row.get(12)?,
+                row.get(13)?,
+                row.get(14)?,
+                parse_optional_datetime(row.get::<_, Option<String>>(15)?),
+            ))
+        }).optional()?;
+        Ok(item)
+    }
+
+    pub fn get_access_user_auth_by_id(&self, id: &str) -> AppResult<Option<(AccessUser, String)>> {
+        let conn = self.conn.lock().map_err(|e| AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string())))?;
+        let mut stmt = conn.prepare(
+            "SELECT id, vault_id, name, email, role, is_active, category_permissions, can_view_password, can_create_account, created_at, password_hash
+             FROM access_users WHERE id = ?1 LIMIT 1"
+        )?;
+        let item = stmt.query_row(params![id], |row| {
+            let permissions_raw: Option<String> = row.get(6)?;
+            let category_permissions = permissions_raw
+                .as_deref()
+                .and_then(|s| serde_json::from_str::<Vec<String>>(s).ok())
+                .unwrap_or_default();
+            Ok((
+                AccessUser {
+                    id: row.get(0)?,
+                    vault_id: row.get(1)?,
+                    name: row.get(2)?,
+                    email: row.get(3)?,
+                    role: row.get(4)?,
+                    is_active: row.get::<_, i32>(5)? != 0,
+                    category_permissions,
+                    can_view_password: row.get::<_, i32>(7)? != 0,
+                    can_create_account: row.get::<_, i32>(8)? != 0,
+                    created_at: parse_datetime(&row.get::<_, String>(9)?),
+                },
+                row.get(10)?,
+            ))
+        }).optional()?;
+        Ok(item)
+    }
+
+    pub fn update_access_user_failed_attempts(&self, id: &str, attempts: i32, locked_until: Option<DateTime<Utc>>) -> AppResult<()> {
+        let conn = self.conn.lock().map_err(|e| AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string())))?;
+        conn.execute(
+            "UPDATE access_users SET failed_attempts = ?1, locked_until = ?2 WHERE id = ?3",
+            params![attempts, locked_until.map(|d| d.to_rfc3339()), id],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_access_user_password(&self, id: &str, password_hash: String, password_salt: String, key_encrypted: String, key_nonce: String) -> AppResult<()> {
+        let conn = self.conn.lock().map_err(|e| AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string())))?;
+        conn.execute(
+            "UPDATE access_users SET password_hash = ?1, password_salt = ?2, key_encrypted = ?3, key_nonce = ?4, failed_attempts = 0, locked_until = NULL WHERE id = ?5",
+            params![password_hash, password_salt, key_encrypted, key_nonce, id],
+        )?;
+        Ok(())
     }
 
     pub fn add_audit_log(&self, log: &AuditLog) -> AppResult<()> {
@@ -1069,6 +1351,24 @@ impl Database {
         ).optional()?;
 
         Ok(result)
+    }
+
+    pub fn update_attachment_data(&self, id: &str, encrypted_data: &[u8], nonce: &str) -> AppResult<()> {
+        let conn = self.conn.lock().map_err(|e| AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string())))?;
+        conn.execute(
+            "UPDATE attachments SET data_encrypted = ?1, data_nonce = ?2 WHERE id = ?3",
+            params![encrypted_data, nonce, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_totp_secret_ciphertext(&self, account_id: &str, encrypted_secret: &str, nonce: &str) -> AppResult<()> {
+        let conn = self.conn.lock().map_err(|e| AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string())))?;
+        conn.execute(
+            "UPDATE totp_secrets SET secret_encrypted = ?1, secret_nonce = ?2 WHERE account_id = ?3",
+            params![encrypted_secret, nonce, account_id],
+        )?;
+        Ok(())
     }
 
     pub fn create_customer(&self, customer: &Customer) -> AppResult<()> {

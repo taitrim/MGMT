@@ -7,6 +7,7 @@ import { EditAccountModal } from './EditAccountModal'
 import { invoke } from '@tauri-apps/api/core'
 import { copyToClipboardSecure } from '../../utils/clipboard'
 import { t, useI18nStore } from '../../stores/i18nStore'
+import { useAuthStore } from '../../stores/authStore'
 
 interface AccountDetailProps {
   account: Account
@@ -15,6 +16,7 @@ interface AccountDetailProps {
 
 export function AccountDetail({ account, onClose }: AccountDetailProps) {
   const { getAccountFields, deleteAccount, updateAccount, accountTypes } = useVaultStore()
+  const { currentAccessUser, verifyCurrentAccessUserPassword } = useAuthStore()
   const { language } = useI18nStore()
   const [fields, setFields] = useState<FieldValue[]>([])
   const [visibleFields, setVisibleFields] = useState<Set<string>>(new Set())
@@ -23,6 +25,10 @@ export function AccountDetail({ account, onClose }: AccountDetailProps) {
   const [hasTotp, setHasTotp] = useState(false)
   const [attachments, setAttachments] = useState<any[]>([])
   const [showEditModal, setShowEditModal] = useState(false)
+  const [showReauthModal, setShowReauthModal] = useState(false)
+  const [reauthPassword, setReauthPassword] = useState('')
+  const [reauthError, setReauthError] = useState<string | null>(null)
+  const [pendingRevealField, setPendingRevealField] = useState<string | null>(null)
 
   useEffect(() => {
     loadFields()
@@ -54,11 +60,43 @@ export function AccountDetail({ account, onClose }: AccountDetailProps) {
     if (newVisible.has(fieldKey)) {
       newVisible.delete(fieldKey)
     } else {
+      if (currentAccessUser && !currentAccessUser.can_view_password) {
+        alert(t(language, 'You do not have permission to view password', 'Bạn không có quyền xem mật khẩu'))
+        return
+      }
+      const cacheUntil = Number(sessionStorage.getItem('password_reauth_until') || '0')
+      if (Date.now() > cacheUntil) {
+        setPendingRevealField(fieldKey)
+        setShowReauthModal(true)
+        return
+      }
       const ok = confirm(t(language, 'Reveal this password?', 'Hiển thị mật khẩu này?'))
       if (!ok) return
       newVisible.add(fieldKey)
     }
     setVisibleFields(newVisible)
+  }
+
+  const confirmReauth = async () => {
+    try {
+      setReauthError(null)
+      const ok = await verifyCurrentAccessUserPassword(reauthPassword)
+      if (!ok) {
+        setReauthError(t(language, 'Wrong password', 'Sai mật khẩu'))
+        return
+      }
+      sessionStorage.setItem('password_reauth_until', String(Date.now() + 5 * 60 * 1000))
+      if (pendingRevealField) {
+        const next = new Set(visibleFields)
+        next.add(pendingRevealField)
+        setVisibleFields(next)
+      }
+      setPendingRevealField(null)
+      setReauthPassword('')
+      setShowReauthModal(false)
+    } catch (e) {
+      setReauthError(String(e))
+    }
   }
 
   const copyToClipboard = async (value: string, fieldKey: string) => {
@@ -92,6 +130,33 @@ export function AccountDetail({ account, onClose }: AccountDetailProps) {
       !['url', 'hostname', 'host', 'ip_address', 'endpoint', 'panel_url'].includes(f.field_key)
   )
 
+  const renderFieldPreview = (field: FieldValue) => {
+    if (field.field_type === 'checkbox') {
+      const enabled = field.value === 'true'
+      return <span className={`text-xs px-2 py-1 rounded ${enabled ? 'bg-emerald-500/15 text-emerald-400' : 'bg-zinc-500/15 text-zinc-400'}`}>{enabled ? 'Bật' : 'Tắt'}</span>
+    }
+
+    if (field.field_type === 'multiselect' || field.field_type === 'tags') {
+      const values = field.value.split(',').map((v) => v.trim()).filter(Boolean)
+      if (values.length === 0) return <p className="text-text-primary truncate">-</p>
+      return (
+        <div className="flex flex-wrap gap-1">
+          {values.map((v) => <span key={v} className="text-xs px-2 py-0.5 rounded bg-sky-500/15 text-sky-300">{v}</span>)}
+        </div>
+      )
+    }
+
+    if (field.field_type === 'select') {
+      return <span className="text-xs px-2 py-1 rounded bg-indigo-500/15 text-indigo-300">{field.value || '-'}</span>
+    }
+
+    if (field.field_type === 'date') {
+      return <span className="text-text-primary">{field.value ? new Date(field.value).toLocaleDateString() : '-'}</span>
+    }
+
+    return <p className="text-text-primary truncate">{field.value}</p>
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, x: 20 }}
@@ -108,6 +173,14 @@ export function AccountDetail({ account, onClose }: AccountDetailProps) {
             <div>
               <h2 className="text-xl font-semibold text-text-primary">{account.name}</h2>
               <p className="text-sm text-text-tertiary">{accountType?.name || 'Login'}</p>
+              <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
+                <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-400">
+                  {new Date(account.updated_at).toLocaleDateString()}
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-400">
+                  {account.updated_by_access_user_name || 'Master'}
+                </span>
+              </div>
               {account.has_expiry && account.expires_at && (
                 <p className="text-xs text-amber-400 mt-1">
                   {t(language, 'Expires on', 'Hết hạn vào')}: {new Date(account.expires_at).toLocaleDateString()}
@@ -177,7 +250,7 @@ export function AccountDetail({ account, onClose }: AccountDetailProps) {
 
           {passwordFields.length > 0 && (
             <div>
-              <h3 className="text-sm font-medium text-text-tertiary mb-3">{t(language, 'Passwords', 'Mat khau')}</h3>
+              <h3 className="text-sm font-medium text-text-tertiary mb-3">{t(language, 'Passwords', 'Mật khẩu')}</h3>
               <p className="text-xs text-text-tertiary mb-2">{t(language, 'For safety, revealing password requires confirmation.', 'Để an toàn, khi hiện mật khẩu sẽ cần xác nhận.')}</p>
               <div className="space-y-3">
                 {passwordFields.map((field) => {
@@ -243,7 +316,7 @@ export function AccountDetail({ account, onClose }: AccountDetailProps) {
                             {field.value}
                           </a>
                         ) : (
-                          <p className="text-text-primary truncate">{field.value}</p>
+                          renderFieldPreview(field)
                         )}
                       </div>
                       {!isUrl && (
@@ -305,7 +378,7 @@ export function AccountDetail({ account, onClose }: AccountDetailProps) {
           </button>
           <button onClick={() => setShowEditModal(true)} className="flex items-center gap-2 text-accent-primary hover:text-accent-primary-hover transition-colors">
             <Edit2 className="w-4 h-4" />
-            <span className="text-sm">{t(language, 'Edit', 'Sua')}</span>
+            <span className="text-sm">{t(language, 'Edit', 'Sửa')}</span>
           </button>
         </div>
       </div>
@@ -313,6 +386,39 @@ export function AccountDetail({ account, onClose }: AccountDetailProps) {
       <AnimatePresence>
         {showEditModal && (
           <EditAccountModal accountId={account.id} onClose={() => { setShowEditModal(false); loadFields() }} />
+        )}
+        {showReauthModal && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) {
+                setShowReauthModal(false)
+                setPendingRevealField(null)
+              }
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              className="w-full max-w-sm bg-bg-secondary border border-border-subtle rounded-2xl p-5"
+            >
+              <h3 className="text-sm font-semibold text-text-primary mb-2">{t(language, 'Re-authentication required', 'Cần xác thực lại')}</h3>
+              <p className="text-xs text-text-tertiary mb-3">{t(language, 'Enter your password to reveal secret fields', 'Nhập mật khẩu user để xem thông tin nhạy cảm')}</p>
+              <input
+                type="password"
+                value={reauthPassword}
+                onChange={(e) => setReauthPassword(e.target.value)}
+                className="w-full bg-bg-tertiary border border-border-subtle rounded-xl px-3 py-2 text-text-primary"
+                placeholder={t(language, 'Password', 'Mật khẩu')}
+              />
+              {reauthError && <p className="text-xs text-red-400 mt-2">{reauthError}</p>}
+              <div className="flex justify-end gap-2 mt-4">
+                <button onClick={() => { setShowReauthModal(false); setPendingRevealField(null); }} className="px-3 py-2 text-text-secondary">{t(language, 'Cancel', 'Hủy')}</button>
+                <button onClick={confirmReauth} disabled={!reauthPassword} className="px-3 py-2 rounded-lg bg-accent-primary text-bg-primary disabled:opacity-50">{t(language, 'Confirm', 'Xác nhận')}</button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </motion.div>

@@ -7,6 +7,7 @@ import { t, useI18nStore } from '../stores/i18nStore'
 export function LockScreen() {
   const { unlock, error, isLoading, hasUser } = useAuthStore()
   const { language } = useI18nStore()
+  const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
 
@@ -14,7 +15,7 @@ export function LockScreen() {
     e.preventDefault()
     if (!password) return
     try {
-      await unlock(password)
+      await unlock(password, identifier)
     } catch (err) {
       // Error is handled by the store
     }
@@ -34,16 +35,25 @@ export function LockScreen() {
                 <Shield className="w-8 h-8 text-accent-primary" />
               </div>
               <h1 className="text-2xl font-semibold text-text-primary">{t(language, 'Welcome Back', 'Chào mừng quay lại')}</h1>
-              <p className="text-text-secondary text-sm mt-1">{t(language, 'Enter your master password to unlock', 'Nhập mật khẩu chính để mở khóa')}</p>
+              <p className="text-text-secondary text-sm mt-1">{t(language, 'Enter your credentials to unlock', 'Nhập thông tin đăng nhập để mở khóa')}</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <input
+                  type="text"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  placeholder={t(language, 'Username or email', 'Tên user hoặc email')}
+                  className="w-full bg-bg-tertiary border border-border-subtle rounded-xl px-4 py-3 text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent-primary focus:ring-1 focus:ring-accent-primary/20 transition-all"
+                />
+              </div>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder={t(language, 'Master password', 'Mật khẩu chính')}
+                  placeholder={t(language, 'Password', 'Mật khẩu')}
                   className="w-full bg-bg-tertiary border border-border-subtle rounded-xl px-4 py-3 pr-12 text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent-primary focus:ring-1 focus:ring-accent-primary/20 transition-all"
                   autoFocus
                 />

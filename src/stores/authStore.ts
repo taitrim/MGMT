@@ -20,11 +20,26 @@ interface DbHealthInfo {
   page_count: number
 }
 
+interface DatabasePathItem {
+  name: string
+  path: string
+}
+
+interface AccessUserSession {
+  id: string
+  name: string
+  role: string
+  category_permissions: string[]
+  can_view_password: boolean
+  can_create_account: boolean
+}
+
 interface AuthState {
   isUnlocked: boolean
   isLoading: boolean
   hasUser: boolean
   user: User | null
+  currentAccessUser: AccessUserSession | null
   storageInfo: AppStorageInfo | null
   dbHealth: DbHealthInfo | null
   error: string | null
@@ -32,10 +47,15 @@ interface AuthState {
   loadStorageInfo: () => Promise<void>
   checkDbHealth: () => Promise<void>
   setStoragePath: (dbPath: string) => Promise<void>
+  listDatabases: () => Promise<DatabasePathItem[]>
+  createDatabase: (name: string) => Promise<DatabasePathItem>
   openDataDirectory: () => Promise<void>
   checkSession: () => Promise<void>
-  setup: (displayName: string, password: string) => Promise<void>
-  unlock: (password: string) => Promise<void>
+  setup: (displayName: string, password: string, adminUsername?: string, adminPassword?: string) => Promise<void>
+  unlock: (password: string, identifier?: string) => Promise<void>
+  loadCurrentAccessUser: () => Promise<void>
+  verifyCurrentAccessUserPassword: (password: string) => Promise<boolean>
+  changeMasterPassword: (currentPassword: string, newPassword: string) => Promise<void>
   lock: () => Promise<void>
   extendSession: () => Promise<void>
 }
@@ -45,6 +65,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: true,
   hasUser: false,
   user: null,
+  currentAccessUser: null,
   storageInfo: null,
   dbHealth: null,
   error: null,
@@ -74,6 +95,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await get().loadStorageInfo()
   },
 
+  listDatabases: async () => {
+    return await invoke<DatabasePathItem[]>('list_app_databases')
+  },
+
+  createDatabase: async (name: string) => {
+    return await invoke<DatabasePathItem>('create_app_database', { name })
+  },
+
   checkDbHealth: async () => {
     try {
       const dbHealth = await invoke<DbHealthInfo>('run_db_health_check')
@@ -98,11 +127,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  setup: async (displayName: string, password: string) => {
+  setup: async (displayName: string, password: string, adminUsername?: string, adminPassword?: string) => {
     try {
       set({ isLoading: true, error: null })
       await invoke('setup_vault', {
-        request: { display_name: displayName, master_password: password }
+        request: {
+          display_name: displayName,
+          master_password: password,
+          admin_username: adminUsername || null,
+          admin_password: adminPassword || null
+        }
       })
       set({ isUnlocked: true, hasUser: true, isLoading: false })
     } catch (error) {
@@ -111,26 +145,48 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  unlock: async (password: string) => {
+  unlock: async (password: string, identifier?: string) => {
     try {
       set({ isLoading: true, error: null })
       const user = await invoke<User>('unlock_vault', {
-        request: { master_password: password }
+        request: { identifier: identifier || null, master_password: password }
       })
       set({ isUnlocked: true, user, isLoading: false })
+      await get().loadCurrentAccessUser()
     } catch (error) {
       set({ isLoading: false, error: String(error) })
       throw error
     }
   },
 
+  loadCurrentAccessUser: async () => {
+    try {
+      const currentAccessUser = await invoke<AccessUserSession | null>('get_current_access_user')
+      set({ currentAccessUser })
+    } catch {
+      set({ currentAccessUser: null })
+    }
+  },
+
+  verifyCurrentAccessUserPassword: async (password: string) => {
+    return await invoke<boolean>('verify_current_access_user_password', {
+      request: { password }
+    })
+  },
+
   lock: async () => {
     try {
       await invoke('lock_vault')
-      set({ isUnlocked: false, user: null })
+      set({ isUnlocked: false, user: null, currentAccessUser: null })
     } catch (error) {
       console.error('Lock error:', error)
     }
+  },
+
+  changeMasterPassword: async (currentPassword: string, newPassword: string) => {
+    await invoke('change_master_password', {
+      request: { current_password: currentPassword, new_password: newPassword }
+    })
   },
 
   extendSession: async () => {

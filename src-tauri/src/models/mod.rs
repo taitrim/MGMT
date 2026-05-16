@@ -79,6 +79,8 @@ pub struct Account {
     pub tags: Vec<String>,
     pub has_expiry: bool,
     pub expires_at: Option<DateTime<Utc>>,
+    pub updated_by_access_user_id: Option<String>,
+    pub updated_by_access_user_name: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,
@@ -163,6 +165,20 @@ pub struct VaultStats {
     pub attachments: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccessUser {
+    pub id: String,
+    pub vault_id: String,
+    pub name: String,
+    pub email: Option<String>,
+    pub role: String,
+    pub is_active: bool,
+    pub category_permissions: Vec<String>,
+    pub can_view_password: bool,
+    pub can_create_account: bool,
+    pub created_at: DateTime<Utc>,
+}
+
 impl User {
     pub fn new(display_name: String, master_key_hash: String, salt: String) -> Self {
         let now = Utc::now();
@@ -208,6 +224,8 @@ impl Account {
             tags: Vec::new(),
             has_expiry: false,
             expires_at: None,
+            updated_by_access_user_id: None,
+            updated_by_access_user_name: None,
             created_at: now,
             updated_at: now,
             deleted_at: None,

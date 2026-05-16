@@ -1,17 +1,36 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { X, FolderOpen, Save, RefreshCw } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
+import { useThemeStore } from '../../stores/themeStore'
 
 interface AppSettingsModalProps {
   onClose: () => void
 }
 
 export function AppSettingsModal({ onClose }: AppSettingsModalProps) {
-  const { storageInfo, dbHealth, checkDbHealth, setStoragePath, openDataDirectory } = useAuthStore()
+  const { storageInfo, dbHealth, checkDbHealth, setStoragePath, openDataDirectory, changeMasterPassword, listDatabases, createDatabase } = useAuthStore()
+  const { theme, setTheme } = useThemeStore()
   const [dbPath, setDbPath] = useState(storageInfo?.db_path || '')
   const [isSaving, setIsSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [dbOptions, setDbOptions] = useState<{ name: string; path: string }[]>([])
+  const [newDbName, setNewDbName] = useState('')
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const items = await listDatabases()
+        setDbOptions(items)
+      } catch {
+        setDbOptions([])
+      }
+    }
+    load()
+  }, [listDatabases])
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -30,8 +49,48 @@ export function AppSettingsModal({ onClose }: AppSettingsModalProps) {
     !dbHealth ? 'Unknown' : (!dbHealth.exists ? 'Missing DB file' : (dbHealth.quick_ok && dbHealth.integrity_ok ? 'Healthy' : 'Corrupted'))
   const hasDbIssue = !!dbHealth && (!dbHealth.exists || !dbHealth.quick_ok || !dbHealth.integrity_ok)
 
+  const handleChangePassword = async () => {
+    setMessage(null)
+    if (newPassword.length < 10) {
+      setMessage('Mật khẩu mới phải từ 10 ký tự trở lên.')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setMessage('Xác nhận mật khẩu mới không khớp.')
+      return
+    }
+    try {
+      await changeMasterPassword(currentPassword, newPassword)
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      setMessage('Đổi master password thành công.')
+    } catch (error) {
+      setMessage(String(error))
+    }
+  }
+
+  const handleCreateDatabase = async () => {
+    if (!newDbName.trim()) return
+    try {
+      const created = await createDatabase(newDbName.trim())
+      const items = await listDatabases()
+      setDbOptions(items)
+      setDbPath(created.path)
+      setNewDbName('')
+      setMessage('Da tao database moi. Bam Save de chuyen sang DB nay.')
+    } catch (error) {
+      setMessage(String(error))
+    }
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
       <motion.div
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -46,6 +105,14 @@ export function AppSettingsModal({ onClose }: AppSettingsModalProps) {
         </div>
 
         <div className="p-5 space-y-4">
+          <div className="bg-bg-tertiary border border-border-subtle rounded-xl p-3 space-y-2">
+            <p className="text-sm text-text-secondary">Theme</p>
+            <div className="flex gap-2">
+              <button onClick={() => setTheme('dark')} className={`px-3 py-1 rounded-lg border ${theme === 'dark' ? 'border-accent-primary text-text-primary' : 'border-border-subtle text-text-secondary'}`}>Dark</button>
+              <button onClick={() => setTheme('light')} className={`px-3 py-1 rounded-lg border ${theme === 'light' ? 'border-accent-primary text-text-primary' : 'border-border-subtle text-text-secondary'}`}>Light</button>
+            </div>
+          </div>
+
           <div className="text-xs text-text-tertiary">
             Mode: {storageInfo?.mode || '-'}
           </div>
@@ -91,11 +158,32 @@ export function AppSettingsModal({ onClose }: AppSettingsModalProps) {
           )}
           <div>
             <label className="text-sm text-text-secondary block mb-1">Database path</label>
+            <select
+              value={dbPath}
+              onChange={(e) => setDbPath(e.target.value)}
+              className="w-full bg-bg-tertiary border border-border-subtle rounded-xl px-4 py-2 text-text-primary mb-2"
+            >
+              <option value="">-- Chon database --</option>
+              {dbOptions.map((d) => (
+                <option key={d.path} value={d.path}>{d.name} - {d.path}</option>
+              ))}
+            </select>
             <input
               value={dbPath}
               onChange={(e) => setDbPath(e.target.value)}
               className="w-full bg-bg-tertiary border border-border-subtle rounded-xl px-4 py-2 text-text-primary"
             />
+            <div className="flex gap-2 mt-2">
+              <input
+                value={newDbName}
+                onChange={(e) => setNewDbName(e.target.value)}
+                placeholder="Tên database mới (vd: customer_a)"
+                className="flex-1 bg-bg-tertiary border border-border-subtle rounded-xl px-4 py-2 text-text-primary"
+              />
+              <button onClick={handleCreateDatabase} className="px-3 py-2 rounded-lg bg-bg-tertiary text-text-secondary hover:text-text-primary">
+                Tạo DB
+              </button>
+            </div>
           </div>
           <div className="flex gap-2">
             <button
@@ -112,6 +200,38 @@ export function AppSettingsModal({ onClose }: AppSettingsModalProps) {
             >
               <Save className="w-4 h-4" />
               Save
+            </button>
+          </div>
+
+          <div className="border-t border-border-subtle pt-4 space-y-2">
+            <p className="text-sm text-text-secondary">Đổi master password</p>
+            <input
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="Mật khẩu hiện tại"
+              className="w-full bg-bg-tertiary border border-border-subtle rounded-xl px-4 py-2 text-text-primary"
+            />
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Mật khẩu mới (>= 10 ký tự)"
+              className="w-full bg-bg-tertiary border border-border-subtle rounded-xl px-4 py-2 text-text-primary"
+            />
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Xác nhận mật khẩu mới"
+              className="w-full bg-bg-tertiary border border-border-subtle rounded-xl px-4 py-2 text-text-primary"
+            />
+            <button
+              onClick={handleChangePassword}
+              disabled={!currentPassword || !newPassword || !confirmPassword}
+              className="px-3 py-2 rounded-lg bg-accent-primary text-bg-primary disabled:opacity-50"
+            >
+              Đổi mật khẩu
             </button>
           </div>
           {message && <p className="text-xs text-text-tertiary">{message}</p>}

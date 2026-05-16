@@ -14,6 +14,10 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
   const [displayName, setDisplayName] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [createAdminNow, setCreateAdminNow] = useState(true)
+  const [adminUsername, setAdminUsername] = useState('admin')
+  const [adminPassword, setAdminPassword] = useState('')
+  const [showAdminPassword, setShowAdminPassword] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
 
   const getPasswordStrength = () => {
@@ -36,13 +40,19 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
   const isValid = displayName.length >= 2 &&
     password.length >= 12 &&
     password === confirmPassword &&
-    strength.score >= 2
+    strength.score >= 2 &&
+    (!createAdminNow || (adminUsername.trim().length >= 3 && adminPassword.length >= 10))
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!isValid) return
     try {
-      await setup(displayName, password)
+      await setup(
+        displayName,
+        password,
+        createAdminNow ? adminUsername.trim() : undefined,
+        createAdminNow ? adminPassword : undefined
+      )
       onComplete?.()
     } catch (err) {
       // Error is handled by the store
@@ -130,6 +140,40 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
               />
               {confirmPassword && password !== confirmPassword && (
                 <p className="text-red-500 text-xs mt-1">{t(language, 'Passwords do not match', 'Mật khẩu không khớp')}</p>
+              )}
+            </div>
+
+            <div className="border border-border-subtle rounded-xl p-3 space-y-3">
+              <label className="flex items-center gap-2 text-sm text-text-secondary">
+                <input type="checkbox" checked={createAdminNow} onChange={(e) => setCreateAdminNow(e.target.checked)} />
+                {t(language, 'Create admin user now', 'Tạo user admin ngay bây giờ')}
+              </label>
+              {createAdminNow && (
+                <>
+                  <input
+                    type="text"
+                    value={adminUsername}
+                    onChange={(e) => setAdminUsername(e.target.value)}
+                    placeholder={t(language, 'Admin username', 'Tên đăng nhập admin')}
+                    className="w-full bg-bg-tertiary border border-border-subtle rounded-xl px-4 py-3 text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent-primary"
+                  />
+                  <div className="relative">
+                    <input
+                      type={showAdminPassword ? 'text' : 'password'}
+                      value={adminPassword}
+                      onChange={(e) => setAdminPassword(e.target.value)}
+                      placeholder={t(language, 'Admin password (minimum 10)', 'Mật khẩu admin (tối thiểu 10 ký tự)')}
+                      className="w-full bg-bg-tertiary border border-border-subtle rounded-xl px-4 py-3 pr-12 text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent-primary"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAdminPassword(!showAdminPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-secondary transition-colors"
+                    >
+                      {showAdminPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </>
               )}
             </div>
 

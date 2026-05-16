@@ -1,4 +1,4 @@
-﻿import { Customer, Account } from '../../stores/vaultStore'
+﻿import { Customer, Account, useVaultStore } from '../../stores/vaultStore'
 import { Building2, Mail, StickyNote, Users } from 'lucide-react'
 import { t, useI18nStore } from '../../stores/i18nStore'
 import { AccountList } from './AccountList'
@@ -19,7 +19,10 @@ export function CustomerDetailPanel({
   onSelectAccount,
 }: CustomerDetailPanelProps) {
   const { language } = useI18nStore()
+  const { accountTypes } = useVaultStore()
   const selectedCustomer = customers.find((c) => c.id === selectedCustomerId) || null
+  const typeNameMap = new Map(accountTypes.map((t) => [t.id, t.name]))
+  const typeColorMap = new Map(accountTypes.map((t) => [t.id, t.color || '#22c55e']))
 
   const typeStats = accounts.reduce<Record<string, number>>((acc, account) => {
     const key = account.account_type_id || 'unknown'
@@ -92,14 +95,19 @@ export function CustomerDetailPanel({
               </div>
               <div className="flex flex-wrap gap-2">
                 {Object.keys(typeStats).length === 0 ? (
-                  <span className="text-xs text-text-tertiary">{t(language, 'No account data', 'Khong co du lieu tai khoan')}</span>
+                  <span className="text-xs text-text-tertiary">{t(language, 'No account data', 'Không có dữ liệu tài khoản')}</span>
                 ) : (
                   Object.entries(typeStats).map(([typeId, count]) => (
                     <span
                       key={typeId}
-                      className="px-2 py-1 rounded-lg bg-bg-tertiary text-xs text-text-secondary border border-border-subtle"
+                      className="px-2 py-1 rounded-lg text-xs border"
+                      style={{
+                        borderColor: `${typeColorMap.get(typeId) || '#22c55e'}66`,
+                        backgroundColor: `${typeColorMap.get(typeId) || '#22c55e'}1a`,
+                        color: typeColorMap.get(typeId) || '#22c55e',
+                      }}
                     >
-                      {typeId}: {count}
+                      {typeNameMap.get(typeId) || typeId}: {count}
                     </span>
                   ))
                 )}
@@ -114,5 +122,3 @@ export function CustomerDetailPanel({
     </div>
   )
 }
-
-

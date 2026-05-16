@@ -1,4 +1,4 @@
-import { Account, useVaultStore } from '../../stores/vaultStore'
+﻿import { Account, useVaultStore } from '../../stores/vaultStore'
 import { motion } from 'framer-motion'
 import { Server, Database, Terminal, Globe, Cloud, Mail, Key, FileKey, Lock, Star, MoreHorizontal, Router } from 'lucide-react'
 import { t, useI18nStore } from '../../stores/i18nStore'
@@ -7,6 +7,8 @@ interface AccountListProps {
   accounts: Account[]
   viewMode: 'grid' | 'list'
   onSelectAccount: (account: Account) => void
+  selectedIds?: Set<string>
+  onToggleSelected?: (id: string) => void
 }
 
 const getIcon = (typeId: string | null) => {
@@ -39,18 +41,26 @@ const colorFromType = (typeId: string | null, explicitColor?: string | null) => 
   return fallbackPalette[Math.abs(hash) % fallbackPalette.length]
 }
 
-export function AccountList({ accounts, viewMode, onSelectAccount }: AccountListProps) {
+const getExpiryState = (account: Account) => {
+  if (!account.has_expiry || !account.expires_at) return { label: 'Không thời hạn', cls: 'text-emerald-500' }
+  const daysLeft = Math.ceil((new Date(account.expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+  if (daysLeft < 0) return { label: `Đã hết hạn ${Math.abs(daysLeft)} ngày`, cls: 'text-rose-500 font-semibold' }
+  if (daysLeft <= 7) return { label: `Còn ${daysLeft} ngày (gấp)`, cls: 'text-rose-400 font-semibold' }
+  if (daysLeft <= 30) return { label: `Còn ${daysLeft} ngày (cảnh báo)`, cls: 'text-amber-400' }
+  return { label: `Còn ${daysLeft} ngày`, cls: 'text-sky-400' }
+}
+
+export function AccountList({ accounts, viewMode, onSelectAccount, selectedIds, onToggleSelected }: AccountListProps) {
   const { language } = useI18nStore()
-  const { accountTypes } = useVaultStore()
+  const { accountTypes, customers } = useVaultStore()
   const typeColorMap = new Map(accountTypes.map((t) => [t.id, t.color]))
   const typeNameMap = new Map(accountTypes.map((t) => [t.id, t.name]))
+  const customerNameMap = new Map(customers.map((c) => [c.id, c.name]))
 
   if (accounts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center">
-        <div className="w-16 h-16 bg-bg-tertiary rounded-2xl flex items-center justify-center mb-4">
-          <Key className="w-8 h-8 text-text-tertiary" />
-        </div>
+        <div className="w-16 h-16 bg-bg-tertiary rounded-2xl flex items-center justify-center mb-4"><Key className="w-8 h-8 text-text-tertiary" /></div>
         <h3 className="text-lg font-medium text-text-primary mb-1">{t(language, 'No items yet', 'Chưa có mục nào')}</h3>
         <p className="text-text-secondary text-sm">{t(language, 'Create your first item to get started', 'Tạo mục đầu tiên để bắt đầu')}</p>
       </div>
@@ -63,31 +73,27 @@ export function AccountList({ accounts, viewMode, onSelectAccount }: AccountList
         {accounts.map((account, index) => {
           const Icon = getIcon(account.account_type_id)
           const color = colorFromType(account.account_type_id, account.account_type_id ? typeColorMap.get(account.account_type_id) : null)
+          const expiry = getExpiryState(account)
 
           return (
-            <motion.button
-              key={account.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.05 }}
-              onClick={() => onSelectAccount(account)}
-              className="group bg-bg-secondary border border-border-subtle hover:border-border-default rounded-xl p-4 text-left transition-all hover:shadow-lg hover:shadow-black/5"
-            >
+            <motion.button key={account.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} onClick={() => onSelectAccount(account)}
+              className="group bg-bg-secondary border border-border-subtle hover:border-border-default rounded-xl p-4 text-left transition-all hover:shadow-lg hover:shadow-black/5">
               <div className="flex items-start justify-between mb-3">
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ color, backgroundColor: `${color}22` }}>
-                  <Icon className="w-5 h-5" />
-                </div>
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ color, backgroundColor: `${color}22` }}><Icon className="w-5 h-5" /></div>
                 {account.favorite && <Star className="w-4 h-4 text-accent-primary fill-accent-primary" />}
               </div>
-              <h3 className="font-medium text-text-primary truncate mb-1 group-hover:text-accent-primary transition-colors">
-                {account.name}
-              </h3>
-              <p className="text-xs text-text-tertiary truncate">
-                {(account.account_type_id && typeNameMap.get(account.account_type_id)) || account.account_type_id || 'Login'}
-              </p>
-              {account.has_expiry && account.expires_at && (
-                <p className="text-[10px] text-amber-400 mt-1">Hết hạn: {new Date(account.expires_at).toLocaleDateString()}</p>
-              )}
+              <h3 className="font-medium text-text-primary truncate mb-1 group-hover:text-accent-primary transition-colors">{account.name}</h3>
+              <p className="text-xs text-text-tertiary truncate">{(account.account_type_id && typeNameMap.get(account.account_type_id)) || account.account_type_id || 'Login'}</p>
+              <p className="text-[10px] text-text-tertiary truncate mt-1">{account.customer_id ? customerNameMap.get(account.customer_id) || 'N/A' : 'Cá nhân'}</p>
+              <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
+                <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-400">
+                  {new Date(account.updated_at).toLocaleDateString()}
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-400">
+                  {account.updated_by_access_user_name || 'Master'}
+                </span>
+              </div>
+              <p className={`text-[10px] mt-1 ${expiry.cls}`}>{expiry.label}</p>
             </motion.button>
           )
         })}
@@ -100,27 +106,28 @@ export function AccountList({ accounts, viewMode, onSelectAccount }: AccountList
       {accounts.map((account, index) => {
         const Icon = getIcon(account.account_type_id)
         const color = colorFromType(account.account_type_id, account.account_type_id ? typeColorMap.get(account.account_type_id) : null)
+        const expiry = getExpiryState(account)
 
         return (
-          <motion.button
-            key={account.id}
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: index * 0.03 }}
-            onClick={() => onSelectAccount(account)}
-            className="w-full group flex items-center gap-4 bg-bg-secondary border border-border-subtle hover:border-border-default rounded-xl p-4 text-left transition-all"
-          >
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ color, backgroundColor: `${color}22` }}>
-              <Icon className="w-5 h-5" />
-            </div>
+          <motion.button key={account.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.03 }} onClick={() => onSelectAccount(account)}
+            className="w-full group flex items-center gap-4 bg-bg-secondary border border-border-subtle hover:border-border-default rounded-xl p-4 text-left transition-all">
+            {onToggleSelected && (
+              <input type="checkbox" checked={!!selectedIds?.has(account.id)} onChange={(e) => { e.stopPropagation(); onToggleSelected(account.id) }} onClick={(e) => e.stopPropagation()} className="shrink-0" />
+            )}
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ color, backgroundColor: `${color}22` }}><Icon className="w-5 h-5" /></div>
             <div className="flex-1 min-w-0">
               <h3 className="font-medium text-text-primary truncate group-hover:text-accent-primary transition-colors">{account.name}</h3>
-              <p className="text-xs text-text-tertiary truncate">
-                {(account.account_type_id && typeNameMap.get(account.account_type_id)) || account.account_type_id || 'Login'}
-              </p>
-              {account.has_expiry && account.expires_at && (
-                <p className="text-[10px] text-amber-400 mt-1">Hết hạn: {new Date(account.expires_at).toLocaleDateString()}</p>
-              )}
+              <p className="text-xs text-text-tertiary truncate">{(account.account_type_id && typeNameMap.get(account.account_type_id)) || account.account_type_id || 'Login'}</p>
+              <p className="text-[10px] text-text-tertiary truncate mt-1">{account.customer_id ? customerNameMap.get(account.customer_id) || 'N/A' : 'Cá nhân'}</p>
+              <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
+                <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-400">
+                  {new Date(account.updated_at).toLocaleDateString()}
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-400">
+                  {account.updated_by_access_user_name || 'Master'}
+                </span>
+              </div>
+              <p className={`text-[10px] mt-1 ${expiry.cls}`}>{expiry.label}</p>
             </div>
             {account.favorite && <Star className="w-4 h-4 text-accent-primary fill-accent-primary shrink-0" />}
             <MoreHorizontal className="w-4 h-4 text-text-tertiary opacity-0 group-hover:opacity-100 transition-opacity" />

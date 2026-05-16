@@ -5,16 +5,22 @@ import { Dashboard } from './pages/Dashboard'
 import { SetupScreen } from './pages/SetupScreen'
 import { listen } from '@tauri-apps/api/event'
 import { t, useI18nStore } from './stores/i18nStore'
+import { useThemeStore } from './stores/themeStore'
 
 function App() {
   const { isUnlocked, isLoading, hasUser, checkStatus, lock } = useAuthStore()
   const { language } = useI18nStore()
+  const { theme } = useThemeStore()
 
   useEffect(() => {
     checkStatus()
     const unlistenPromise = listen('lock-vault', () => { lock() })
     return () => { unlistenPromise.then(fn => fn()) }
   }, [checkStatus, lock])
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+  }, [theme])
 
   if (isLoading) {
     return (
