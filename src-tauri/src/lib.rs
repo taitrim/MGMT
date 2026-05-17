@@ -124,6 +124,7 @@ pub fn run() {
             get_attachment,
             get_attachments,
             export_vault,
+            export_vault_versioned,
             import_vault,
             import_vault_dry_run,
             run_db_health_check,

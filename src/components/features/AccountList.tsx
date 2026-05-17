@@ -77,7 +77,7 @@ export function AccountList({ accounts, viewMode, onSelectAccount, selectedIds, 
 
           return (
             <motion.button key={account.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} onClick={() => onSelectAccount(account)}
-              className="group bg-bg-secondary border border-border-subtle hover:border-border-default rounded-xl p-4 text-left transition-all hover:shadow-lg hover:shadow-black/5">
+              className="group surface-card hover:border-border-default p-4 text-left transition-all hover:-translate-y-0.5">
               <div className="flex items-start justify-between mb-3">
                 <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ color, backgroundColor: `${color}22` }}><Icon className="w-5 h-5" /></div>
                 {account.favorite && <Star className="w-4 h-4 text-accent-primary fill-accent-primary" />}
@@ -110,7 +110,7 @@ export function AccountList({ accounts, viewMode, onSelectAccount, selectedIds, 
 
         return (
           <motion.button key={account.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.03 }} onClick={() => onSelectAccount(account)}
-            className="w-full group flex items-center gap-4 bg-bg-secondary border border-border-subtle hover:border-border-default rounded-xl p-4 text-left transition-all">
+            className="w-full group flex items-center gap-4 surface-card hover:border-border-default p-4 text-left transition-all">
             {onToggleSelected && (
               <input type="checkbox" checked={!!selectedIds?.has(account.id)} onChange={(e) => { e.stopPropagation(); onToggleSelected(account.id) }} onClick={(e) => e.stopPropagation()} className="shrink-0" />
             )}

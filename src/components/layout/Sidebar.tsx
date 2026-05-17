@@ -161,7 +161,7 @@ export function Sidebar({
               className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors text-left"
             >
               <Settings className="w-4 h-4" />
-              <span className="text-sm font-medium">App Settings</span>
+              <span className="text-sm font-medium">{t(language, 'App Settings', 'Thiết lập ứng dụng')}</span>
             </button>
           )}
         </div>

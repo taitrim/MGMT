@@ -337,6 +337,17 @@ pub async fn export_vault(vault: State<'_, VaultService>, dest_path: String) -> 
 }
 
 #[tauri::command]
+pub async fn export_vault_versioned(
+    vault: State<'_, VaultService>,
+    dest_dir: String,
+    keep_last: Option<usize>,
+) -> Result<String, AppError> {
+    let keep = keep_last.unwrap_or(10).max(1);
+    let path = vault.export_vault_versioned(std::path::PathBuf::from(dest_dir), keep)?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 pub async fn import_vault(vault: State<'_, VaultService>, src_path: String) -> Result<(), AppError> {
     vault.import_vault(std::path::PathBuf::from(src_path))
 }

@@ -11,7 +11,7 @@ import { CustomerDetailPanel } from '../components/features/CustomerDetailPanel'
 import { AccountTypeManagerModal } from '../components/features/AccountTypeManagerModal'
 import { AppSettingsModal } from '../components/features/AppSettingsModal'
 import { AccessUserManagerModal } from '../components/features/AccessUserManagerModal'
-import { AnimatePresence } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 
 export function Dashboard() {
   const { lock, extendSession, checkSession, storageInfo, loadStorageInfo, dbHealth, checkDbHealth, currentAccessUser } = useAuthStore()
@@ -26,6 +26,7 @@ export function Dashboard() {
     fetchStats,
     searchAccounts,
     stats,
+    isLoading,
   } = useVaultStore()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showCustomerModal, setShowCustomerModal] = useState(false)
@@ -40,6 +41,9 @@ export function Dashboard() {
   const [bulkCustomerId, setBulkCustomerId] = useState('')
   const [bulkTag, setBulkTag] = useState('')
   const [bulkExpiryDays, setBulkExpiryDays] = useState(30)
+  const [filterTag, setFilterTag] = useState('')
+  const [filterUpdater, setFilterUpdater] = useState('')
+  const [filterExpiryState, setFilterExpiryState] = useState<'all' | 'expired' | 'expiring_30' | 'active'>('all')
   const isOwnerOrAdmin = !currentAccessUser || currentAccessUser.role === 'owner' || currentAccessUser.role === 'admin'
   const canCreateAccount = !currentAccessUser || currentAccessUser.role === 'owner' || currentAccessUser.role === 'admin' || currentAccessUser.can_create_account
 
@@ -105,6 +109,9 @@ export function Dashboard() {
           : [])
       : []
 
+  const availableTags = Array.from(new Set(visibleAccounts.flatMap((a) => a.tags || []).filter(Boolean))).sort((a, b) => a.localeCompare(b))
+  const availableUpdaters = Array.from(new Set(visibleAccounts.map((a) => a.updated_by_access_user_name || 'Master'))).sort((a, b) => a.localeCompare(b))
+
   useEffect(() => {
     const timer = setTimeout(async () => {
       if (!searchQuery.trim()) {
@@ -121,6 +128,23 @@ export function Dashboard() {
   const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
   const expiredCount = accounts.filter((a) => a.has_expiry && a.expires_at && new Date(a.expires_at) < now).length
   const expiringSoonCount = accounts.filter((a) => a.has_expiry && a.expires_at && new Date(a.expires_at) >= now && new Date(a.expires_at) <= sevenDaysLater).length
+
+  if (filterTag) {
+    filteredAccounts = filteredAccounts.filter((a) => (a.tags || []).includes(filterTag))
+  }
+  if (filterUpdater) {
+    filteredAccounts = filteredAccounts.filter((a) => (a.updated_by_access_user_name || 'Master') === filterUpdater)
+  }
+  if (filterExpiryState !== 'all') {
+    const thirtyDaysLater = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+    filteredAccounts = filteredAccounts.filter((a) => {
+      if (!a.has_expiry || !a.expires_at) return filterExpiryState === 'active'
+      const d = new Date(a.expires_at)
+      if (filterExpiryState === 'expired') return d < now
+      if (filterExpiryState === 'expiring_30') return d >= now && d <= thirtyDaysLater
+      return d > now
+    })
+  }
   const expiringByCustomer = customers.map((c) => ({
     id: c.id,
     name: c.name,
@@ -210,7 +234,7 @@ export function Dashboard() {
 
         <main className="flex-1 overflow-auto p-6">
           <div className="mb-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <div className="bg-bg-secondary border border-border-subtle rounded-xl p-4">
+            <div className="surface-card p-4">
               <p className="text-sm text-text-secondary mb-3">Tổng quan tài khoản theo loại</p>
               <div className="space-y-2">
                 {topTypes.length === 0 && <p className="text-xs text-text-tertiary">Chưa có dữ liệu</p>}
@@ -231,18 +255,18 @@ export function Dashboard() {
               </div>
             </div>
 
-            <div className="bg-bg-secondary border border-border-subtle rounded-xl p-4">
+            <div className="surface-card p-4">
               <p className="text-sm text-text-secondary mb-3">Trạng thái thời hạn</p>
               <div className="grid grid-cols-3 gap-3">
-                <div className="bg-bg-tertiary rounded-lg p-3 border border-border-subtle">
+                <div className="soft-chip p-3">
                   <p className="text-xs text-text-tertiary">Hết hạn</p>
                   <p className="text-xl font-semibold text-red-400">{expiredCount}</p>
                 </div>
-                <div className="bg-bg-tertiary rounded-lg p-3 border border-border-subtle">
+                <div className="soft-chip p-3">
                   <p className="text-xs text-text-tertiary">Sắp hết hạn</p>
                   <p className="text-xl font-semibold text-amber-400">{expiringSoonCount}</p>
                 </div>
-                <div className="bg-bg-tertiary rounded-lg p-3 border border-border-subtle">
+                <div className="soft-chip p-3">
                   <p className="text-xs text-text-tertiary">Còn hạn / không hạn</p>
                   <p className="text-xl font-semibold text-emerald-400">{Math.max(0, accounts.length - expiredCount - expiringSoonCount)}</p>
                 </div>
@@ -250,8 +274,31 @@ export function Dashboard() {
             </div>
           </div>
 
+          <div className="mb-4 surface-card p-3">
+            <p className="text-sm text-text-secondary mb-2">Bộ lọc nâng cao</p>
+            <div className="flex flex-wrap gap-2 items-center">
+              <select value={filterTag} onChange={(e) => setFilterTag(e.target.value)} className="soft-chip px-2 py-1 text-sm">
+                <option value="">Tất cả tag</option>
+                {availableTags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}
+              </select>
+              <select value={filterUpdater} onChange={(e) => setFilterUpdater(e.target.value)} className="soft-chip px-2 py-1 text-sm">
+                <option value="">Tất cả người cập nhật</option>
+                {availableUpdaters.map((u) => <option key={u} value={u}>{u}</option>)}
+              </select>
+              <select value={filterExpiryState} onChange={(e) => setFilterExpiryState(e.target.value as 'all' | 'expired' | 'expiring_30' | 'active')} className="soft-chip px-2 py-1 text-sm">
+                <option value="all">Mọi trạng thái hạn</option>
+                <option value="expired">Đã hết hạn</option>
+                <option value="expiring_30">Sắp hết hạn (30 ngày)</option>
+                <option value="active">Còn hạn / không hạn</option>
+              </select>
+              <button onClick={() => { setFilterTag(''); setFilterUpdater(''); setFilterExpiryState('all') }} className="px-2 py-1 rounded soft-chip text-text-secondary hover:text-text-primary">
+                Xóa lọc
+              </button>
+            </div>
+          </div>
+
           {expiringByCustomer.length > 0 && activeCategory !== 'customers' && (
-            <div className="mb-4 bg-bg-secondary border border-border-subtle rounded-xl p-3">
+            <div className="mb-4 surface-card p-3">
               <p className="text-sm text-text-secondary mb-2">Sắp hết hạn theo khách hàng</p>
               <div className="flex flex-wrap gap-2">
                 {expiringByCustomer.map((item) => (
@@ -264,7 +311,7 @@ export function Dashboard() {
           )}
 
           {selectedIds.size > 0 && (
-            <div className="mb-4 bg-bg-secondary border border-border-subtle rounded-xl p-3 space-y-2">
+            <div className="mb-4 surface-card p-3 space-y-2">
               <p className="text-sm text-text-secondary">Thao tác hàng loạt ({selectedIds.size} mục)</p>
               <div className="flex flex-wrap gap-2 items-center">
                 <select value={bulkCustomerId} onChange={(e) => setBulkCustomerId(e.target.value)} className="bg-bg-tertiary border border-border-subtle rounded-lg px-2 py-1 text-sm">
@@ -299,16 +346,37 @@ export function Dashboard() {
             />
           )}
 
-          {selectedAccount ? (
+          {isLoading && !selectedAccount ? (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {Array.from({ length: 8 }).map((_, idx) => (
+                <div key={idx} className="surface-card p-4 space-y-3 animate-pulse">
+                  <div className="w-10 h-10 rounded-lg bg-bg-tertiary" />
+                  <div className="h-4 w-2/3 rounded bg-bg-tertiary" />
+                  <div className="h-3 w-1/2 rounded bg-bg-tertiary" />
+                  <div className="h-3 w-4/5 rounded bg-bg-tertiary" />
+                </div>
+              ))}
+            </motion.div>
+          ) : selectedAccount ? (
             <AccountDetail account={selectedAccount} onClose={() => useVaultStore.getState().selectAccount(null)} />
           ) : activeCategory !== 'customers' ? (
-            <AccountList
-              accounts={filteredAccounts}
-              viewMode={viewMode}
-              onSelectAccount={(account) => useVaultStore.getState().selectAccount(account)}
-              selectedIds={selectedIds}
-              onToggleSelected={toggleSelected}
-            />
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={`${activeCategory}-${filterTag}-${filterUpdater}-${filterExpiryState}-${viewMode}`}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.18 }}
+              >
+                <AccountList
+                  accounts={filteredAccounts}
+                  viewMode={viewMode}
+                  onSelectAccount={(account) => useVaultStore.getState().selectAccount(account)}
+                  selectedIds={selectedIds}
+                  onToggleSelected={toggleSelected}
+                />
+              </motion.div>
+            </AnimatePresence>
           ) : null}
         </main>
       </div>

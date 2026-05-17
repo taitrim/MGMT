@@ -40,6 +40,7 @@ pub struct VaultService {
     current_access_user: Arc<RwLock<Option<AccessUser>>>,
     session_expires_at: Arc<RwLock<Option<chrono::DateTime<Utc>>>>,
     search_cache: Arc<RwLock<HashMap<String, Vec<Account>>>>,
+    reauth_attempts: Arc<RwLock<HashMap<String, (u32, Option<chrono::DateTime<Utc>>)>>>,
 }
 
 impl VaultService {
@@ -331,6 +332,7 @@ impl VaultService {
             current_access_user: Arc::new(RwLock::new(None)),
             session_expires_at: Arc::new(RwLock::new(None)),
             search_cache: Arc::new(RwLock::new(HashMap::new())),
+            reauth_attempts: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -554,7 +556,35 @@ impl VaultService {
         *self.current_vault_id.write() = None;
         *self.current_access_user.write() = None;
         *self.session_expires_at.write() = None;
+        self.reauth_attempts.write().clear();
         self.invalidate_search_cache();
+    }
+
+    fn current_reauth_actor_key(&self) -> AppResult<String> {
+        if let Some(access_user) = self.current_access_user.read().clone() {
+            return Ok(format!("access:{}", access_user.id));
+        }
+        let user_id = self.get_current_user_id()?;
+        Ok(format!("master:{}", user_id))
+    }
+
+    fn write_reauth_audit(&self, action: &str, ok: bool, details: serde_json::Value) -> AppResult<()> {
+        let user_id = self.get_current_user_id()?;
+        let audit_log = AuditLog {
+            id: Uuid::new_v4().to_string(),
+            user_id,
+            action: action.to_string(),
+            target_type: Some("security".to_string()),
+            target_id: None,
+            details: Some(serde_json::json!({
+                "ok": ok,
+                "current_access_user_id": self.current_access_user.read().as_ref().map(|u| u.id.clone()),
+                "current_access_user_name": self.current_access_user.read().as_ref().map(|u| u.name.clone()),
+                "details": details
+            })),
+            created_at: Utc::now(),
+        };
+        self.db.add_audit_log(&audit_log)
     }
 
     pub fn extend_session(&self) -> AppResult<()> {
@@ -583,6 +613,33 @@ impl VaultService {
         let backup_str = serde_json::to_string_pretty(&backup)?;
         std::fs::write(&dest_path, backup_str)?;
         Ok(())
+    }
+
+    pub fn export_vault_versioned(&self, dest_dir: std::path::PathBuf, keep_last: usize) -> AppResult<std::path::PathBuf> {
+        self.check_session()?;
+        std::fs::create_dir_all(&dest_dir)?;
+        let ts = Utc::now().format("%Y%m%d-%H%M%S");
+        let file_name = format!("vault-backup-{}.svb", ts);
+        let backup_path = dest_dir.join(file_name);
+        self.export_vault(backup_path.clone())?;
+
+        let mut backups: Vec<std::path::PathBuf> = std::fs::read_dir(&dest_dir)?
+            .filter_map(|entry| entry.ok().map(|e| e.path()))
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|n| n.starts_with("vault-backup-") && n.ends_with(".svb"))
+                    .unwrap_or(false)
+            })
+            .collect();
+
+        backups.sort_by(|a, b| b.cmp(a));
+        if backups.len() > keep_last {
+            for old in backups.into_iter().skip(keep_last) {
+                let _ = std::fs::remove_file(old);
+            }
+        }
+        Ok(backup_path)
     }
 
     pub fn import_vault(&self, src_path: std::path::PathBuf) -> AppResult<()> {
@@ -1296,18 +1353,75 @@ impl VaultService {
 
     pub fn verify_current_access_user_password(&self, password: &str) -> AppResult<bool> {
         self.check_session()?;
+        let actor_key = self.current_reauth_actor_key()?;
+        {
+            let attempts = self.reauth_attempts.read();
+            if let Some((_, Some(locked_until))) = attempts.get(&actor_key) {
+                if Utc::now() < *locked_until {
+                    let remaining = (*locked_until - Utc::now()).num_seconds().max(0) as u64;
+                    let _ = self.write_reauth_audit(
+                        "reauth_view_password_blocked",
+                        false,
+                        serde_json::json!({ "remaining_seconds": remaining }),
+                    );
+                    return Err(AppError::BruteForceProtection(remaining));
+                }
+            }
+        }
+
         let current = self.current_access_user.read().clone();
-        if current.is_none() {
+        let is_valid = if current.is_none() {
+            let user_id = self.get_current_user_id()?;
+            let user = self
+                .db
+                .get_user(&user_id)?
+                .ok_or(AppError::Auth("User not found".to_string()))?;
+            self.crypto.read().verify_password(password, &user.master_key_hash)?
+        } else {
+            let current = current.unwrap();
+            if !current.can_view_password {
+                return Err(AppError::InvalidOperation("Current user is not allowed to view passwords".to_string()));
+            }
+            if let Some((_, hash)) = self.db.get_access_user_auth_by_id(&current.id)? {
+                self.crypto.read().verify_password(password, &hash)?
+            } else {
+                return Err(AppError::Auth("Access user not found".to_string()));
+            }
+        };
+
+        if is_valid {
+            self.reauth_attempts.write().remove(&actor_key);
+            let _ = self.write_reauth_audit("reauth_view_password_success", true, serde_json::json!({}));
             return Ok(true);
         }
-        let current = current.unwrap();
-        if !current.can_view_password {
-            return Err(AppError::InvalidOperation("Current user is not allowed to view passwords".to_string()));
+
+        let (attempts_count, locked_until) = {
+            let mut attempts = self.reauth_attempts.write();
+            let (count, _) = attempts.get(&actor_key).cloned().unwrap_or((0, None));
+            let next_count = count + 1;
+            let next_locked_until = if next_count >= 5 {
+                Some(Utc::now() + chrono::Duration::minutes(5))
+            } else {
+                None
+            };
+            attempts.insert(actor_key, (next_count, next_locked_until));
+            (next_count, next_locked_until)
+        };
+
+        let _ = self.write_reauth_audit(
+            "reauth_view_password_failed",
+            false,
+            serde_json::json!({
+                "attempts": attempts_count,
+                "locked_until": locked_until.map(|d| d.to_rfc3339())
+            }),
+        );
+
+        if let Some(until) = locked_until {
+            let remaining = (until - Utc::now()).num_seconds().max(0) as u64;
+            return Err(AppError::BruteForceProtection(remaining));
         }
-        if let Some((_, hash)) = self.db.get_access_user_auth_by_id(&current.id)? {
-            return self.crypto.read().verify_password(password, &hash);
-        }
-        Err(AppError::Auth("Access user not found".to_string()))
+        Ok(false)
     }
 
     pub fn create_customer(&self, name: String, contact: Option<String>, notes: Option<String>) -> AppResult<Customer> {

@@ -133,6 +133,7 @@ interface VaultState {
   exportAccountTypeTemplates: (destPath: string) => Promise<void>
   importAccountTypeTemplates: (srcPath: string) => Promise<number>
   exportVault: (destPath: string) => Promise<void>
+  exportVaultVersioned: (destDir: string, keepLast?: number) => Promise<string>
   importVault: (srcPath: string) => Promise<void>
   importVaultDryRun: (srcPath: string) => Promise<ImportDryRunResult>
 }
@@ -463,6 +464,15 @@ export const useVaultStore = create<VaultState>((set, get) => ({
       await invoke('export_vault', { destPath })
     } catch (error) {
       console.error('Export failed:', error)
+      throw error
+    }
+  },
+
+  exportVaultVersioned: async (destDir: string, keepLast = 10) => {
+    try {
+      return await invoke<string>('export_vault_versioned', { destDir, keepLast })
+    } catch (error) {
+      console.error('Versioned export failed:', error)
       throw error
     }
   },

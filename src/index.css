@@ -58,6 +58,23 @@ body {
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
+.surface-card {
+  background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+[data-theme='light'] .surface-card {
+  box-shadow: 0 8px 24px rgba(19, 34, 56, 0.08);
+}
+
+.soft-chip {
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-tertiary) 88%, transparent);
+  border-radius: 10px;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

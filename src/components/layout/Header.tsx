@@ -1,4 +1,4 @@
-import { Search, Grid3X3, List, Lock, Settings, Command, Key } from 'lucide-react'
+﻿import { Search, Grid3X3, List, Lock, Command, Key } from 'lucide-react'
 import { useState } from 'react'
 import { PasswordGenerator } from '../features/PasswordGenerator'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -27,7 +27,7 @@ export function Header({
   const { language, toggleLanguage } = useI18nStore()
 
   return (
-    <header className="h-16 bg-bg-secondary border-b border-border-subtle flex items-center justify-between px-6">
+    <header className="h-16 bg-bg-secondary/95 backdrop-blur border-b border-border-subtle flex items-center justify-between px-6 shadow-sm">
       <div className="flex-1 max-w-md">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary" />
@@ -46,7 +46,7 @@ export function Header({
       </div>
 
       <div className="flex items-center gap-2">
-        <div className="flex bg-bg-tertiary rounded-lg p-1">
+        <div className="flex bg-bg-tertiary rounded-lg p-1 border border-border-subtle">
           <button
             onClick={() => onViewModeChange('grid')}
             className={`p-1.5 rounded-md transition-colors ${
@@ -75,7 +75,7 @@ export function Header({
 
         <button
           onClick={() => setShowGenerator(true)}
-          className="p-2 text-text-secondary hover:text-text-primary hover:bg-bg-hover rounded-lg transition-colors"
+          className="p-2 text-text-secondary hover:text-text-primary hover:bg-bg-hover rounded-lg transition-colors border border-transparent hover:border-border-subtle"
           title={t(language, 'Password Generator', 'Tạo mật khẩu')}
         >
           <Key className="w-5 h-5" />
@@ -83,7 +83,7 @@ export function Header({
 
         <button
           onClick={onLock}
-          className="p-2 text-text-secondary hover:text-text-primary hover:bg-bg-hover rounded-lg transition-colors"
+          className="p-2 text-text-secondary hover:text-text-primary hover:bg-bg-hover rounded-lg transition-colors border border-transparent hover:border-border-subtle"
           title={t(language, 'Lock vault', 'Khóa kho')}
         >
           <Lock className="w-5 h-5" />
@@ -94,10 +94,6 @@ export function Header({
             {expiredCount > 0 ? `${expiredCount} hết hạn` : `${expiringSoonCount} sắp hết hạn`}
           </div>
         )}
-
-        <button className="p-2 text-text-secondary hover:text-text-primary hover:bg-bg-hover rounded-lg transition-colors">
-          <Settings className="w-5 h-5" />
-        </button>
       </div>
 
       <AnimatePresence>
@@ -124,4 +120,3 @@ export function Header({
     </header>
   )
 }
-

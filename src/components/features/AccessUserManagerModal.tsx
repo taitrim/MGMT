@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { X, Plus, Trash2, Save, KeyRound } from 'lucide-react'
 import { AccessUser, useVaultStore } from '../../stores/vaultStore'
@@ -78,27 +78,15 @@ export function AccessUserManagerModal({ onClose }: AccessUserManagerModalProps)
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose()
-      }}
-    >
-      <motion.div
-        initial={{ opacity: 0, scale: 0.96 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.96 }}
-        className="w-full max-w-5xl bg-bg-secondary border border-border-subtle rounded-2xl overflow-hidden"
-      >
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }} className="w-full max-w-5xl surface-card overflow-hidden">
         <div className="flex items-center justify-between p-5 border-b border-border-subtle">
           <h2 className="text-lg font-semibold text-text-primary">Phân quyền user</h2>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-bg-hover text-text-secondary">
-            <X className="w-4 h-4" />
-          </button>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-bg-hover text-text-secondary"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="p-5 space-y-4">
-          <div className="bg-bg-tertiary border border-border-subtle rounded-xl p-3 space-y-3">
+          <div className="soft-chip p-3 space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
               <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Tên user" className="bg-bg-primary border border-border-subtle rounded-xl px-3 py-2 text-text-primary" />
               <input value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="Email (tùy chọn)" className="bg-bg-primary border border-border-subtle rounded-xl px-3 py-2 text-text-primary" />
@@ -106,26 +94,16 @@ export function AccessUserManagerModal({ onClose }: AccessUserManagerModalProps)
               <select value={newRole} onChange={(e) => setNewRole(e.target.value as AccessUser['role'])} className="bg-bg-primary border border-border-subtle rounded-xl px-3 py-2 text-text-primary">
                 {roles.map((r) => <option key={r} value={r}>{r}</option>)}
               </select>
-              <button onClick={onCreate} className="bg-accent-primary text-bg-primary rounded-xl px-3 py-2 flex items-center justify-center gap-2">
-                <Plus className="w-4 h-4" />
-                Thêm user
-              </button>
+              <button onClick={onCreate} className="bg-accent-primary text-bg-primary rounded-xl px-3 py-2 flex items-center justify-center gap-2"><Plus className="w-4 h-4" />Thêm user</button>
             </div>
-            <label className="text-xs text-text-secondary flex items-center gap-2">
-              <input type="checkbox" checked={newCanViewPassword} onChange={(e) => setNewCanViewPassword(e.target.checked)} />
-              Cho phép xem password
-            </label>
-            <label className="text-xs text-text-secondary flex items-center gap-2">
-              <input type="checkbox" checked={newCanCreateAccount} onChange={(e) => setNewCanCreateAccount(e.target.checked)} />
-              Cho phép thêm tài khoản
-            </label>
+            <label className="text-xs text-text-secondary flex items-center gap-2"><input type="checkbox" checked={newCanViewPassword} onChange={(e) => setNewCanViewPassword(e.target.checked)} />Cho phép xem password</label>
+            <label className="text-xs text-text-secondary flex items-center gap-2"><input type="checkbox" checked={newCanCreateAccount} onChange={(e) => setNewCanCreateAccount(e.target.checked)} />Cho phép thêm tài khoản</label>
             <div>
               <p className="text-xs text-text-secondary mb-2">Quyền xem theo hạng mục</p>
               <div className="flex flex-wrap gap-2">
                 {categoryOptions.map((cat) => (
                   <label key={cat} className="text-xs text-text-secondary px-2 py-1 rounded border border-border-subtle flex items-center gap-1">
-                    <input type="checkbox" checked={newCategoryPermissions.includes(cat)} onChange={() => toggleNewCategory(cat)} />
-                    {cat}
+                    <input type="checkbox" checked={newCategoryPermissions.includes(cat)} onChange={() => toggleNewCategory(cat)} />{cat}
                   </label>
                 ))}
               </div>
@@ -133,35 +111,16 @@ export function AccessUserManagerModal({ onClose }: AccessUserManagerModalProps)
           </div>
 
           <div className="space-y-2 max-h-[45vh] overflow-auto">
-            {accessUsers.map((u) => (
-              <UserRow
-                key={u.id}
-                user={u}
-                onSave={updateAccessUser}
-                onDelete={deleteAccessUser}
-                onOpenReset={() => setResetTarget(u)}
-              />
-            ))}
-            {accessUsers.length === 0 && (
-              <p className="text-sm text-text-tertiary">Chưa có user phân quyền nào.</p>
-            )}
+            {accessUsers.map((u) => <UserRow key={u.id} user={u} onSave={updateAccessUser} onDelete={deleteAccessUser} onOpenReset={() => setResetTarget(u)} />)}
+            {accessUsers.length === 0 && <p className="text-sm text-text-tertiary">Chưa có user phân quyền nào.</p>}
           </div>
           {error && <p className="text-xs text-red-400">{error}</p>}
         </div>
       </motion.div>
 
       {resetTarget && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) {
-              setResetTarget(null)
-              setResetPassword('')
-              setResetConfirm('')
-            }
-          }}
-        >
-          <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-md bg-bg-secondary border border-border-subtle rounded-2xl p-5 space-y-3">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60" onMouseDown={(e) => { if (e.target === e.currentTarget) { setResetTarget(null); setResetPassword(''); setResetConfirm('') } }}>
+          <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-md surface-card p-5 space-y-3">
             <h3 className="text-sm font-semibold text-text-primary">Reset password - {resetTarget.name}</h3>
             <input type="password" value={resetPassword} onChange={(e) => setResetPassword(e.target.value)} placeholder="Mật khẩu mới (>=10 ký tự)" className="w-full bg-bg-tertiary border border-border-subtle rounded-xl px-3 py-2 text-text-primary" />
             <input type="password" value={resetConfirm} onChange={(e) => setResetConfirm(e.target.value)} placeholder="Nhập lại mật khẩu mới" className="w-full bg-bg-tertiary border border-border-subtle rounded-xl px-3 py-2 text-text-primary" />
@@ -176,17 +135,7 @@ export function AccessUserManagerModal({ onClose }: AccessUserManagerModalProps)
   )
 }
 
-function UserRow({
-  user,
-  onSave,
-  onDelete,
-  onOpenReset,
-}: {
-  user: AccessUser
-  onSave: (user: AccessUser) => Promise<void>
-  onDelete: (id: string) => Promise<void>
-  onOpenReset: () => void
-}) {
+function UserRow({ user, onSave, onDelete, onOpenReset }: { user: AccessUser; onSave: (user: AccessUser) => Promise<void>; onDelete: (id: string) => Promise<void>; onOpenReset: () => void }) {
   const [draft, setDraft] = useState<AccessUser>(user)
 
   useEffect(() => {
@@ -201,13 +150,11 @@ function UserRow({
   }
 
   return (
-    <div className="bg-bg-tertiary border border-border-subtle rounded-xl p-3 space-y-2">
+    <div className="soft-chip p-3 space-y-2">
       <div className="grid grid-cols-1 md:grid-cols-8 gap-2 items-center">
         <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} className="bg-bg-primary border border-border-subtle rounded-lg px-2 py-1 text-sm text-text-primary" />
         <input value={draft.email || ''} onChange={(e) => setDraft({ ...draft, email: e.target.value || null })} className="bg-bg-primary border border-border-subtle rounded-lg px-2 py-1 text-sm text-text-primary" />
-        <select value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value as AccessUser['role'] })} className="bg-bg-primary border border-border-subtle rounded-lg px-2 py-1 text-sm text-text-primary">
-          {roles.map((r) => <option key={r} value={r}>{r}</option>)}
-        </select>
+        <select value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value as AccessUser['role'] })} className="bg-bg-primary border border-border-subtle rounded-lg px-2 py-1 text-sm text-text-primary">{roles.map((r) => <option key={r} value={r}>{r}</option>)}</select>
         <label className="text-xs text-text-secondary flex items-center gap-2"><input type="checkbox" checked={draft.is_active} onChange={(e) => setDraft({ ...draft, is_active: e.target.checked })} />Active</label>
         <label className="text-xs text-text-secondary flex items-center gap-2"><input type="checkbox" checked={draft.can_view_password} onChange={(e) => setDraft({ ...draft, can_view_password: e.target.checked })} />Xem password</label>
         <label className="text-xs text-text-secondary flex items-center gap-2"><input type="checkbox" checked={draft.can_create_account} onChange={(e) => setDraft({ ...draft, can_create_account: e.target.checked })} />Thêm tài khoản</label>
@@ -221,8 +168,7 @@ function UserRow({
       <div className="flex flex-wrap gap-2">
         {categoryOptions.map((cat) => (
           <label key={cat} className="text-xs text-text-secondary px-2 py-1 rounded border border-border-subtle flex items-center gap-1">
-            <input type="checkbox" checked={draft.category_permissions.includes(cat)} onChange={() => toggleCategory(cat)} />
-            {cat}
+            <input type="checkbox" checked={draft.category_permissions.includes(cat)} onChange={() => toggleCategory(cat)} />{cat}
           </label>
         ))}
       </div>

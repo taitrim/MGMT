@@ -139,3 +139,30 @@ Lenh tao tag va trigger release build:
 git tag -a v1.0.1 -m "Release v1.0.1"
 git push origin v1.0.1
 ```
+
+## 11) Final Release Checklist (2026-05-17)
+
+Da kiem tra pass:
+
+- `npm.cmd run build`
+- `cargo check`
+- `npm.cmd run tauri:build:portable`
+  - Artifact: `src-tauri/target/x86_64-pc-windows-msvc/release/secure-vault.exe`
+
+Bao mat/phan quyen:
+- Re-auth xem password xac thuc dung mat khau user/master
+- Co brute-force protection cho re-auth
+- Co audit log cho re-auth success/failed/blocked
+
+Backup/Restore:
+- Backup versioned + retention
+- UI Backup nhanh trong App Settings
+- UI Restore co dry-run verify truoc restore
+
+UI/UX:
+- Da nang cap visual card/dashboard/filter
+- Co skeleton loading + transition category/filter/view mode
+- Da sua cac loi tieng Viet o cac man vua nang cap
+
+File checklist chi tiet:
+- `RELEASE_FINAL_CHECKLIST.md`
