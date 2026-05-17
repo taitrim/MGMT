@@ -4,6 +4,7 @@ import { X, FolderOpen, Save, RefreshCw, Database, ShieldCheck } from 'lucide-re
 import { useAuthStore } from '../../stores/authStore'
 import { useThemeStore } from '../../stores/themeStore'
 import { useVaultStore } from '../../stores/vaultStore'
+import { SearchableSelect } from '../common/SearchableSelect'
 
 interface AppSettingsModalProps {
   onClose: () => void
@@ -184,14 +185,14 @@ export function AppSettingsModal({ onClose }: AppSettingsModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }} className="w-full max-w-2xl bg-bg-secondary border border-border-subtle rounded-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }} className="w-full max-w-5xl max-h-[94vh] modal-panel border border-border-subtle rounded-2xl overflow-hidden">
         <div className="flex items-center justify-between p-5 border-b border-border-subtle">
           <h2 className="text-lg font-semibold text-text-primary">Thiết lập ứng dụng</h2>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-bg-hover text-text-secondary"><X className="w-4 h-4" /></button>
         </div>
 
-        <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+        <div className="p-5 space-y-4 max-h-[86vh] overflow-y-auto">
           <div className="bg-bg-tertiary border border-border-subtle rounded-xl p-3 space-y-2">
             <p className="text-sm text-text-secondary">Giao diện</p>
             <div className="flex gap-2">
@@ -231,10 +232,17 @@ export function AppSettingsModal({ onClose }: AppSettingsModalProps) {
 
           <div className="bg-bg-tertiary border border-border-subtle rounded-xl p-3 space-y-2">
             <div className="flex items-center gap-2 text-text-primary"><Database className="w-4 h-4" /> <span className="text-sm">Database</span></div>
-            <select value={dbPath} onChange={(e) => setDbPath(e.target.value)} className="w-full bg-bg-primary border border-border-subtle rounded-xl px-4 py-2 text-text-primary">
-              <option value="">-- Chọn database --</option>
-              {dbOptions.map((d) => <option key={d.path} value={d.path}>{d.name} - {d.path}</option>)}
-            </select>
+            <SearchableSelect
+              value={dbPath}
+              onChange={setDbPath}
+              options={[
+                { value: '', label: '-- Chọn database --' },
+                ...dbOptions.map((d) => ({ value: d.path, label: `${d.name} - ${d.path}` })),
+              ]}
+              placeholder="-- Chọn database --"
+              searchPlaceholder="Tìm database..."
+              emptyText="Không có database"
+            />
             <input value={dbPath} onChange={(e) => setDbPath(e.target.value)} className="w-full bg-bg-primary border border-border-subtle rounded-xl px-4 py-2 text-text-primary" />
             <div className="flex gap-2 mt-2">
               <input value={newDbName} onChange={(e) => setNewDbName(e.target.value)} placeholder="Tên database mới (vd: customer_a)" className="flex-1 bg-bg-primary border border-border-subtle rounded-xl px-4 py-2 text-text-primary" />
@@ -303,3 +311,4 @@ export function AppSettingsModal({ onClose }: AppSettingsModalProps) {
     </div>
   )
 }
+

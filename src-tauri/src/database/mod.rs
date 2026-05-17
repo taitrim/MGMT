@@ -859,6 +859,7 @@ impl Database {
                                 required: f.get("required").and_then(|r| r.as_bool()).unwrap_or(false),
                                 encrypted: f.get("encrypted").and_then(|e| e.as_bool()).unwrap_or(true),
                                 options: None,
+                                field_group: None,
                             })
                         }).collect()
                     } else {
@@ -913,6 +914,7 @@ impl Database {
                             required: f.get("required").and_then(|r| r.as_bool()).unwrap_or(false),
                             encrypted: f.get("encrypted").and_then(|e| e.as_bool()).unwrap_or(true),
                             options: None,
+                            field_group: None,
                         })
                     }).collect()
                 } else {
@@ -1428,6 +1430,15 @@ impl Database {
         conn.execute(
             "UPDATE customers SET contact = ?1, notes = ?2 WHERE id = ?3",
             params![contact, notes, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_customer(&self, id: &str, name: String, contact: Option<String>, notes: Option<String>) -> AppResult<()> {
+        let conn = self.conn.lock().map_err(|e| AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string())))?;
+        conn.execute(
+            "UPDATE customers SET name = ?1, contact = ?2, notes = ?3 WHERE id = ?4",
+            params![name, contact, notes, id],
         )?;
         Ok(())
     }

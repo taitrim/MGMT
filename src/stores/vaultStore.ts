@@ -1,4 +1,4 @@
-import { create } from 'zustand'
+﻿import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
 
 export interface Account {
@@ -38,6 +38,7 @@ export interface FieldDefinition {
   required: boolean
   encrypted: boolean
   options: string[] | null
+  field_group?: 'identity' | 'connection' | 'detail' | null
 }
 
 export interface FieldValue {
@@ -102,6 +103,7 @@ interface VaultState {
   fetchStats: () => Promise<void>
   fetchCustomers: () => Promise<void>
   createCustomer: (name: string, contact?: string, notes?: string) => Promise<void>
+  updateCustomer: (id: string, name: string, contact?: string, notes?: string) => Promise<void>
   deleteCustomer: (id: string) => Promise<void>
   fetchAccessUsers: () => Promise<void>
   createAccessUser: (
@@ -190,6 +192,18 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     try {
       await invoke('create_customer', {
         request: { name, contact: contact || null, notes: notes || null }
+      })
+      await get().fetchCustomers()
+    } catch (error) {
+      set({ error: String(error) })
+      throw error
+    }
+  },
+
+  updateCustomer: async (id: string, name: string, contact?: string, notes?: string) => {
+    try {
+      await invoke('update_customer', {
+        request: { id, name, contact: contact || null, notes: notes || null }
       })
       await get().fetchCustomers()
     } catch (error) {
@@ -479,11 +493,6 @@ export const useVaultStore = create<VaultState>((set, get) => ({
 
   importVault: async (srcPath: string) => {
     try {
-      const dryRun = await get().importVaultDryRun(srcPath)
-      const ok = window.confirm(
-        `Backup hợp lệ (${dryRun.bytes} bytes, ${dryRun.algorithm}). Tiếp tục ghi đè vault hiện tại?`
-      )
-      if (!ok) return
       await invoke('import_vault', { srcPath })
     } catch (error) {
       console.error('Import failed:', error)
@@ -500,3 +509,4 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     }
   }
 }))
+

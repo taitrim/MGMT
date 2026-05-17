@@ -70,6 +70,14 @@ pub struct CreateCustomerRequest {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateCustomerRequest {
+    pub id: String,
+    pub name: String,
+    pub contact: Option<String>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CreateAccessUserRequest {
     pub name: String,
     pub email: Option<String>,
@@ -375,6 +383,11 @@ pub async fn create_customer(vault: State<'_, VaultService>, request: CreateCust
 #[tauri::command]
 pub async fn delete_customer(vault: State<'_, VaultService>, id: String) -> Result<(), AppError> {
     vault.delete_customer(&id)
+}
+
+#[tauri::command]
+pub async fn update_customer(vault: State<'_, VaultService>, request: UpdateCustomerRequest) -> Result<(), AppError> {
+    vault.update_customer(&request.id, request.name, request.contact, request.notes)
 }
 
 #[tauri::command]

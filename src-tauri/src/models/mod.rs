@@ -47,6 +47,8 @@ pub struct FieldDefinition {
     pub required: bool,
     pub encrypted: bool,
     pub options: Option<Vec<String>>,
+    #[serde(default)]
+    pub field_group: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

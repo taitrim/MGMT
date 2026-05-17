@@ -60,7 +60,7 @@ export function AuditLogModal({ onClose }: AuditLogModalProps) {
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        className="relative w-full max-w-2xl bg-bg-secondary border border-border-subtle rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[80vh]"
+        className="relative w-full max-w-5xl modal-panel border border-border-subtle rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
       >
         <div className="flex items-center justify-between p-6 border-b border-border-subtle">
           <div className="flex items-center gap-3">
@@ -69,7 +69,7 @@ export function AuditLogModal({ onClose }: AuditLogModalProps) {
             </div>
             <div>
               <h2 className="text-xl font-semibold text-text-primary">{t(language, 'Security Audit Log', 'Nhật ký bảo mật')}</h2>
-              <p className="text-sm text-text-tertiary">{t(language, 'Track all activity in your vault', 'Theo doi toan bo hoat dong trong kho')}</p>
+              <p className="text-sm text-text-tertiary">{t(language, 'Track all activity in your vault', 'Theo dõi toàn bộ hoạt động trong kho')}</p>
             </div>
           </div>
           <button

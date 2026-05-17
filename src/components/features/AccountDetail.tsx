@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect } from 'react'
 import { Account, FieldValue, useVaultStore } from '../../stores/vaultStore'
 import { AnimatePresence, motion } from 'framer-motion'
-import { X, Copy, Eye, EyeOff, Star, Trash2, Edit2, Key, RefreshCw, FileText, Download } from 'lucide-react'
+import { X, Copy, Eye, EyeOff, Star, Trash2, Edit2, Key, RefreshCw, FileText, Download, AlertTriangle } from 'lucide-react'
 import { TOTPViewer } from './TOTPViewer'
 import { EditAccountModal } from './EditAccountModal'
 import { invoke } from '@tauri-apps/api/core'
@@ -29,6 +29,8 @@ export function AccountDetail({ account, onClose }: AccountDetailProps) {
   const [reauthPassword, setReauthPassword] = useState('')
   const [reauthError, setReauthError] = useState<string | null>(null)
   const [pendingRevealField, setPendingRevealField] = useState<string | null>(null)
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
+  const [confirmRevealField, setConfirmRevealField] = useState<string | null>(null)
 
   useEffect(() => {
     loadFields()
@@ -70,11 +72,18 @@ export function AccountDetail({ account, onClose }: AccountDetailProps) {
         setShowReauthModal(true)
         return
       }
-      const ok = confirm(t(language, 'Reveal this password?', 'Hiển thị mật khẩu này?'))
-      if (!ok) return
-      newVisible.add(fieldKey)
+      setConfirmRevealField(fieldKey)
+      return
     }
     setVisibleFields(newVisible)
+  }
+
+  const confirmRevealNow = () => {
+    if (!confirmRevealField) return
+    const next = new Set(visibleFields)
+    next.add(confirmRevealField)
+    setVisibleFields(next)
+    setConfirmRevealField(null)
   }
 
   const confirmReauth = async () => {
@@ -112,22 +121,45 @@ export function AccountDetail({ account, onClose }: AccountDetailProps) {
   }
 
   const handleDelete = async () => {
-    if (!confirm(t(language, 'Are you sure you want to delete this item?', 'Bạn có chắc muốn xóa mục này không?'))) return
+    setConfirmDeleteOpen(true)
+  }
+
+  const confirmDelete = async () => {
     setIsDeleting(true)
-    await deleteAccount(account.id)
-    onClose()
+    try {
+      await deleteAccount(account.id)
+      onClose()
+    } finally {
+      setIsDeleting(false)
+      setConfirmDeleteOpen(false)
+    }
   }
 
   const accountType = accountTypes.find(t => t.id === account.account_type_id)
   const fieldNameByKey = new Map((accountType?.fields || []).map((f) => [f.key, f.name]))
-  const loginAddressFields = fields.filter((f) =>
-    ['url', 'hostname', 'host', 'ip_address', 'endpoint', 'panel_url'].includes(f.field_key)
-  )
+  const fieldGroupByKey = new Map((accountType?.fields || []).map((f) => [f.key, f.field_group || null]))
+  const detectAutoGroup = (key: string): 'identity' | 'connection' | 'detail' => {
+    const k = key.toLowerCase()
+    if (k === 'username' || k === 'user' || k === 'login' || k === 'email' || k === 'account') return 'identity'
+    if (k.includes('url') || k.includes('host') || k.includes('server') || k.includes('ip') || k.includes('port') || k.includes('endpoint') || k.includes('domain') || k.includes('panel')) return 'connection'
+    return 'detail'
+  }
+  const resolveGroup = (key: string): 'identity' | 'connection' | 'detail' => {
+    const configured = fieldGroupByKey.get(key)
+    if (configured === 'identity' || configured === 'connection' || configured === 'detail') return configured
+    return detectAutoGroup(key)
+  }
+  const loginAddressFields = fields.filter((f) => {
+    const g = resolveGroup(f.field_key)
+    return g === 'identity' || g === 'connection'
+  })
+  const identityFields = loginAddressFields.filter((f) => resolveGroup(f.field_key) === 'identity')
+  const connectionFields = loginAddressFields.filter((f) => resolveGroup(f.field_key) === 'connection')
   const passwordFields = fields.filter(f => f.field_type === 'password')
   const otherFields = fields.filter(
     (f) =>
       f.field_type !== 'password' &&
-      !['url', 'hostname', 'host', 'ip_address', 'endpoint', 'panel_url'].includes(f.field_key)
+      resolveGroup(f.field_key) === 'detail'
   )
 
   const renderFieldPreview = (field: FieldValue) => {
@@ -162,10 +194,10 @@ export function AccountDetail({ account, onClose }: AccountDetailProps) {
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 20 }}
-      className="max-w-2xl mx-auto"
+      className="w-full max-w-6xl mx-auto"
     >
-      <div className="bg-bg-secondary border border-border-subtle rounded-2xl overflow-hidden">
-        <div className="flex items-center justify-between p-6 border-b border-border-subtle">
+      <div className="modal-panel border border-border-subtle rounded-2xl overflow-hidden shadow-2xl">
+        <div className="flex items-center justify-between p-6 border-b border-border-subtle bg-gradient-to-r from-emerald-500/10 via-sky-500/5 to-violet-500/10">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-accent-primary/10 rounded-xl flex items-center justify-center">
               <Key className="w-6 h-6 text-accent-primary" />
@@ -208,91 +240,117 @@ export function AccountDetail({ account, onClose }: AccountDetailProps) {
           </div>
         </div>
 
-        <div className="p-6 space-y-6">
-          {hasTotp && (
-            <div>
+        <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <div className="space-y-5">
+            {hasTotp && (
+            <div className="premium-section section-emerald p-4">
               <h3 className="text-sm font-medium text-text-tertiary mb-3">{t(language, 'Two-Factor Authentication', 'Xác thực hai lớp')}</h3>
               <TOTPViewer accountId={account.id} />
             </div>
-          )}
+            )}
 
-          {loginAddressFields.length > 0 && (
-            <div>
-              <h3 className="text-sm font-medium text-text-tertiary mb-3">{t(language, 'Login Access', 'Địa chỉ đăng nhập')}</h3>
-              <div className="space-y-3">
-                {loginAddressFields.map((field) => (
-                  <div key={field.field_key} className="flex items-center gap-3 bg-bg-tertiary rounded-xl p-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-text-tertiary mb-1">{fieldNameByKey.get(field.field_key) || field.field_key}</p>
-                      {field.value.startsWith('http') ? (
-                        <a href={field.value} target="_blank" rel="noopener noreferrer" className="text-accent-primary hover:underline truncate block">
-                          {field.value}
-                        </a>
-                      ) : (
-                        <p className="text-text-primary truncate">{field.value}</p>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => copyToClipboard(field.value, field.field_key)}
-                      className={`p-2 rounded-lg transition-colors shrink-0 ${
-                        copiedField === field.field_key
-                          ? 'text-accent-primary bg-accent-primary/10'
-                          : 'text-text-tertiary hover:text-text-secondary hover:bg-bg-hover'
-                      }`}
-                    >
-                      {copiedField === field.field_key ? <RefreshCw className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {(loginAddressFields.length > 0 || passwordFields.length > 0) && (
+            <div className="premium-section section-sky p-4">
+              <h3 className="text-sm font-medium text-text-tertiary mb-3">{t(language, 'Login & Password', 'Thông tin đăng nhập & mật khẩu')}</h3>
 
-          {passwordFields.length > 0 && (
-            <div>
-              <h3 className="text-sm font-medium text-text-tertiary mb-3">{t(language, 'Passwords', 'Mật khẩu')}</h3>
-              <p className="text-xs text-text-tertiary mb-2">{t(language, 'For safety, revealing password requires confirmation.', 'Để an toàn, khi hiện mật khẩu sẽ cần xác nhận.')}</p>
-              <div className="space-y-3">
-                {passwordFields.map((field) => {
-                  const isVisible = visibleFields.has(field.field_key)
-                  const isCopied = copiedField === field.field_key
-
-                  return (
-                    <div
-                      key={field.field_key}
-                      className="flex items-center gap-3 bg-bg-tertiary rounded-xl p-3"
-                    >
-                      <div className="flex-1">
+              {loginAddressFields.length > 0 && (
+                <div className="space-y-3 mb-3">
+                  {identityFields.length > 0 && <p className="text-xs uppercase tracking-wide text-sky-300/90">Danh tính</p>}
+                  {identityFields.map((field) => (
+                    <div key={field.field_key} className="flex items-center gap-3 bg-bg-tertiary rounded-xl p-3">
+                      <div className="flex-1 min-w-0">
                         <p className="text-xs text-text-tertiary mb-1">{fieldNameByKey.get(field.field_key) || field.field_key}</p>
-                        <p className="font-mono text-text-primary">
-                          {isVisible ? field.value : '************'}
-                        </p>
+                        {field.value.startsWith('http') ? (
+                          <a href={field.value} target="_blank" rel="noopener noreferrer" className="text-accent-primary hover:underline truncate block">
+                            {field.value}
+                          </a>
+                        ) : (
+                          <p className="text-text-primary truncate">{field.value}</p>
+                        )}
                       </div>
                       <button
-                        onClick={() => toggleFieldVisibility(field.field_key)}
-                        className="p-2 text-text-tertiary hover:text-text-secondary transition-colors"
-                      >
-                        {isVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                      <button
                         onClick={() => copyToClipboard(field.value, field.field_key)}
-                        className={`p-2 rounded-lg transition-colors ${
-                          isCopied
+                        className={`p-2 rounded-lg transition-colors shrink-0 ${
+                          copiedField === field.field_key
                             ? 'text-accent-primary bg-accent-primary/10'
                             : 'text-text-tertiary hover:text-text-secondary hover:bg-bg-hover'
                         }`}
                       >
-                        {isCopied ? <RefreshCw className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                        {copiedField === field.field_key ? <RefreshCw className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                       </button>
                     </div>
-                  )
-                })}
-              </div>
+                  ))}
+                  {connectionFields.length > 0 && <p className="text-xs uppercase tracking-wide text-emerald-300/90 mt-1">Kết nối</p>}
+                  {connectionFields.map((field) => (
+                    <div key={field.field_key} className="flex items-center gap-3 bg-bg-tertiary rounded-xl p-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-text-tertiary mb-1">{fieldNameByKey.get(field.field_key) || field.field_key}</p>
+                        {field.value.startsWith('http') ? (
+                          <a href={field.value} target="_blank" rel="noopener noreferrer" className="text-accent-primary hover:underline truncate block">
+                            {field.value}
+                          </a>
+                        ) : (
+                          <p className="text-text-primary truncate">{field.value}</p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => copyToClipboard(field.value, field.field_key)}
+                        className={`p-2 rounded-lg transition-colors shrink-0 ${
+                          copiedField === field.field_key
+                            ? 'text-accent-primary bg-accent-primary/10'
+                            : 'text-text-tertiary hover:text-text-secondary hover:bg-bg-hover'
+                        }`}
+                      >
+                        {copiedField === field.field_key ? <RefreshCw className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {passwordFields.length > 0 && (
+                <div className="space-y-3">
+                  <p className="text-xs text-text-tertiary mb-2">{t(language, 'For safety, revealing password requires confirmation.', 'Để an toàn, khi hiện mật khẩu sẽ cần xác nhận.')}</p>
+                  {passwordFields.map((field) => {
+                    const isVisible = visibleFields.has(field.field_key)
+                    const isCopied = copiedField === field.field_key
+
+                    return (
+                      <div key={field.field_key} className="flex items-center gap-3 bg-bg-tertiary rounded-xl p-3 border border-amber-500/20">
+                        <div className="flex-1">
+                          <p className="text-xs text-text-tertiary mb-1">{fieldNameByKey.get(field.field_key) || field.field_key}</p>
+                          <p className="font-mono text-text-primary">
+                            {isVisible ? field.value : '************'}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => toggleFieldVisibility(field.field_key)}
+                          className="p-2 text-text-tertiary hover:text-text-secondary transition-colors"
+                        >
+                          {isVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                        <button
+                          onClick={() => copyToClipboard(field.value, field.field_key)}
+                          className={`p-2 rounded-lg transition-colors ${
+                            isCopied
+                              ? 'text-accent-primary bg-accent-primary/10'
+                              : 'text-text-tertiary hover:text-text-secondary hover:bg-bg-hover'
+                          }`}
+                        >
+                          {isCopied ? <RefreshCw className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
+          </div>
 
+          <div className="space-y-5">
           {otherFields.length > 0 && (
-            <div>
+            <div className="premium-section section-violet p-4">
               <h3 className="text-sm font-medium text-text-tertiary mb-3">{t(language, 'Details', 'Chi tiết')}</h3>
               <div className="space-y-3">
                 {otherFields.map((field) => {
@@ -339,7 +397,7 @@ export function AccountDetail({ account, onClose }: AccountDetailProps) {
           )}
 
           {attachments.length > 0 && (
-            <div>
+            <div className="premium-section section-violet p-4">
               <h3 className="text-sm font-medium text-text-tertiary mb-3">{t(language, 'Attachments', 'Tệp đính kèm')}</h3>
               <div className="grid grid-cols-2 gap-3">
                 {attachments.map((file) => (
@@ -365,6 +423,7 @@ export function AccountDetail({ account, onClose }: AccountDetailProps) {
               </div>
             </div>
           )}
+          </div>
         </div>
 
         <div className="flex items-center justify-between p-6 border-t border-border-subtle bg-bg-tertiary/50">
@@ -389,7 +448,7 @@ export function AccountDetail({ account, onClose }: AccountDetailProps) {
         )}
         {showReauthModal && (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70"
             onMouseDown={(e) => {
               if (e.target === e.currentTarget) {
                 setShowReauthModal(false)
@@ -401,7 +460,7 @@ export function AccountDetail({ account, onClose }: AccountDetailProps) {
               initial={{ opacity: 0, scale: 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.96 }}
-              className="w-full max-w-sm bg-bg-secondary border border-border-subtle rounded-2xl p-5"
+              className="w-full max-w-sm modal-panel border border-border-subtle rounded-2xl p-5"
             >
               <h3 className="text-sm font-semibold text-text-primary mb-2">{t(language, 'Re-authentication required', 'Cần xác thực lại')}</h3>
               <p className="text-xs text-text-tertiary mb-3">{t(language, 'Enter your password to reveal secret fields', 'Nhập mật khẩu user để xem thông tin nhạy cảm')}</p>
@@ -416,6 +475,40 @@ export function AccountDetail({ account, onClose }: AccountDetailProps) {
               <div className="flex justify-end gap-2 mt-4">
                 <button onClick={() => { setShowReauthModal(false); setPendingRevealField(null); }} className="px-3 py-2 text-text-secondary">{t(language, 'Cancel', 'Hủy')}</button>
                 <button onClick={confirmReauth} disabled={!reauthPassword} className="px-3 py-2 rounded-lg bg-accent-primary text-bg-primary disabled:opacity-50">{t(language, 'Confirm', 'Xác nhận')}</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+        {confirmDeleteOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" onMouseDown={(e) => { if (e.target === e.currentTarget) setConfirmDeleteOpen(false) }}>
+            <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-md modal-panel border border-border-subtle rounded-2xl p-5 space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-red-500/15 text-red-400 border border-red-500/30">
+                  <Trash2 className="w-4 h-4" />
+                </span>
+                <h3 className="text-base font-semibold text-text-primary">{t(language, 'Confirm delete', 'Xác nhận xóa')}</h3>
+              </div>
+              <p className="text-sm text-text-secondary">{t(language, 'Are you sure you want to delete this item?', 'Bạn có chắc muốn xóa mục này không?')}</p>
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setConfirmDeleteOpen(false)} className="px-3 py-2 rounded-xl bg-bg-tertiary text-text-secondary">{t(language, 'Cancel', 'Hủy')}</button>
+                <button onClick={confirmDelete} className="px-3 py-2 rounded-xl bg-red-500 text-white">{t(language, 'Delete', 'Xóa')}</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+        {confirmRevealField && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" onMouseDown={(e) => { if (e.target === e.currentTarget) setConfirmRevealField(null) }}>
+            <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-md modal-panel border border-border-subtle rounded-2xl p-5 space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                  <AlertTriangle className="w-4 h-4" />
+                </span>
+                <h3 className="text-base font-semibold text-text-primary">{t(language, 'Reveal password', 'Hiển thị mật khẩu')}</h3>
+              </div>
+              <p className="text-sm text-text-secondary">{t(language, 'Reveal this password?', 'Hiển thị mật khẩu này?')}</p>
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setConfirmRevealField(null)} className="px-3 py-2 rounded-xl bg-bg-tertiary text-text-secondary">{t(language, 'Cancel', 'Hủy')}</button>
+                <button onClick={confirmRevealNow} className="px-3 py-2 rounded-xl bg-accent-primary text-bg-primary">{t(language, 'Confirm', 'Xác nhận')}</button>
               </div>
             </motion.div>
           </div>

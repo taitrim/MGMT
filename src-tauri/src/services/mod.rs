@@ -1452,6 +1452,19 @@ impl VaultService {
         Ok(())
     }
 
+    pub fn update_customer(&self, id: &str, name: String, contact: Option<String>, notes: Option<String>) -> AppResult<()> {
+        self.ensure_can_modify_account()?;
+        let trimmed_name = name.trim().to_string();
+        if trimmed_name.is_empty() {
+            return Err(AppError::InvalidOperation("Customer name is required".to_string()));
+        }
+        let contact_enc = self.encrypt_optional_metadata(contact)?;
+        let notes_enc = self.encrypt_optional_metadata(notes)?;
+        self.db.update_customer(id, trimmed_name, contact_enc, notes_enc)?;
+        self.invalidate_search_cache();
+        Ok(())
+    }
+
     pub fn has_user(&self) -> AppResult<bool> {
         let users = self.db.get_users()?;
         Ok(!users.is_empty())

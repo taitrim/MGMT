@@ -102,20 +102,28 @@ export function AccountList({ accounts, viewMode, onSelectAccount, selectedIds, 
   }
 
   return (
-    <div className="space-y-2">
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
       {accounts.map((account, index) => {
         const Icon = getIcon(account.account_type_id)
         const color = colorFromType(account.account_type_id, account.account_type_id ? typeColorMap.get(account.account_type_id) : null)
         const expiry = getExpiryState(account)
 
         return (
-          <motion.button key={account.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.03 }} onClick={() => onSelectAccount(account)}
-            className="w-full group flex items-center gap-4 surface-card hover:border-border-default p-4 text-left transition-all">
-            {onToggleSelected && (
-              <input type="checkbox" checked={!!selectedIds?.has(account.id)} onChange={(e) => { e.stopPropagation(); onToggleSelected(account.id) }} onClick={(e) => e.stopPropagation()} className="shrink-0" />
-            )}
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ color, backgroundColor: `${color}22` }}><Icon className="w-5 h-5" /></div>
-            <div className="flex-1 min-w-0">
+          <motion.button key={account.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.03 }} onClick={() => onSelectAccount(account)}
+            className="w-full group surface-card hover:border-border-default p-4 text-left transition-all hover:-translate-y-0.5">
+            <div className="flex items-start justify-between gap-2 mb-3">
+              <div className="flex items-center gap-3 min-w-0">
+                {onToggleSelected && (
+                  <input type="checkbox" checked={!!selectedIds?.has(account.id)} onChange={(e) => { e.stopPropagation(); onToggleSelected(account.id) }} onClick={(e) => e.stopPropagation()} className="shrink-0" />
+                )}
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ color, backgroundColor: `${color}22` }}><Icon className="w-5 h-5" /></div>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                {account.favorite && <Star className="w-4 h-4 text-accent-primary fill-accent-primary" />}
+                <MoreHorizontal className="w-4 h-4 text-text-tertiary opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            </div>
+            <div className="min-w-0">
               <h3 className="font-medium text-text-primary truncate group-hover:text-accent-primary transition-colors">{account.name}</h3>
               <p className="text-xs text-text-tertiary truncate">{(account.account_type_id && typeNameMap.get(account.account_type_id)) || account.account_type_id || 'Login'}</p>
               <p className="text-[10px] text-text-tertiary truncate mt-1">{account.customer_id ? customerNameMap.get(account.customer_id) || 'N/A' : 'Cá nhân'}</p>
@@ -129,8 +137,6 @@ export function AccountList({ accounts, viewMode, onSelectAccount, selectedIds, 
               </div>
               <p className={`text-[10px] mt-1 ${expiry.cls}`}>{expiry.label}</p>
             </div>
-            {account.favorite && <Star className="w-4 h-4 text-accent-primary fill-accent-primary shrink-0" />}
-            <MoreHorizontal className="w-4 h-4 text-text-tertiary opacity-0 group-hover:opacity-100 transition-opacity" />
           </motion.button>
         )
       })}

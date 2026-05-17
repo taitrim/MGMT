@@ -27,7 +27,7 @@ export function Header({
   const { language, toggleLanguage } = useI18nStore()
 
   return (
-    <header className="h-16 bg-bg-secondary/95 backdrop-blur border-b border-border-subtle flex items-center justify-between px-6 shadow-sm">
+    <header className="h-20 bg-bg-secondary/70 backdrop-blur-2xl border-b border-border-subtle flex items-center justify-between px-6 shadow-sm">
       <div className="flex-1 max-w-md">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary" />
@@ -36,7 +36,7 @@ export function Header({
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder={t(language, 'Search items...', 'Tìm mục...')}
-            className="w-full bg-bg-tertiary border border-border-subtle rounded-xl pl-10 pr-12 py-2 text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent-primary transition-colors"
+            className="w-full bg-bg-tertiary/75 backdrop-blur border border-border-subtle rounded-2xl pl-10 pr-12 py-3 text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent-primary transition-colors"
           />
           <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-text-tertiary">
             <Command className="w-3 h-3" />
@@ -46,19 +46,19 @@ export function Header({
       </div>
 
       <div className="flex items-center gap-2">
-        <div className="flex bg-bg-tertiary rounded-lg p-1 border border-border-subtle">
+        <div className="flex bg-bg-tertiary/75 rounded-2xl p-1.5 border border-border-subtle">
           <button
             onClick={() => onViewModeChange('grid')}
-            className={`p-1.5 rounded-md transition-colors ${
-              viewMode === 'grid' ? 'bg-bg-elevated text-text-primary' : 'text-text-tertiary hover:text-text-secondary'
+            className={`p-2 rounded-xl transition-colors ${
+              viewMode === 'grid' ? 'bg-bg-elevated text-text-primary shadow-sm' : 'text-text-tertiary hover:text-text-secondary'
             }`}
           >
             <Grid3X3 className="w-4 h-4" />
           </button>
           <button
             onClick={() => onViewModeChange('list')}
-            className={`p-1.5 rounded-md transition-colors ${
-              viewMode === 'list' ? 'bg-bg-elevated text-text-primary' : 'text-text-tertiary hover:text-text-secondary'
+            className={`p-2 rounded-xl transition-colors ${
+              viewMode === 'list' ? 'bg-bg-elevated text-text-primary shadow-sm' : 'text-text-tertiary hover:text-text-secondary'
             }`}
           >
             <List className="w-4 h-4" />
@@ -67,7 +67,7 @@ export function Header({
 
         <button
           onClick={toggleLanguage}
-          className="px-3 py-2 text-xs font-semibold text-text-secondary hover:text-text-primary hover:bg-bg-hover rounded-lg transition-colors border border-border-subtle"
+          className="px-3 py-2.5 text-xs font-semibold text-text-secondary hover:text-text-primary hover:bg-bg-hover rounded-2xl transition-colors border border-border-subtle"
           title={t(language, 'Switch language', 'Chuyển ngôn ngữ')}
         >
           {language === 'en' ? 'VI' : 'EN'}
@@ -75,7 +75,7 @@ export function Header({
 
         <button
           onClick={() => setShowGenerator(true)}
-          className="p-2 text-text-secondary hover:text-text-primary hover:bg-bg-hover rounded-lg transition-colors border border-transparent hover:border-border-subtle"
+          className="p-2.5 text-text-secondary hover:text-text-primary hover:bg-bg-hover rounded-2xl transition-colors border border-transparent hover:border-border-subtle"
           title={t(language, 'Password Generator', 'Tạo mật khẩu')}
         >
           <Key className="w-5 h-5" />
@@ -83,7 +83,7 @@ export function Header({
 
         <button
           onClick={onLock}
-          className="p-2 text-text-secondary hover:text-text-primary hover:bg-bg-hover rounded-lg transition-colors border border-transparent hover:border-border-subtle"
+          className="p-2.5 text-text-secondary hover:text-text-primary hover:bg-bg-hover rounded-2xl transition-colors border border-transparent hover:border-border-subtle"
           title={t(language, 'Lock vault', 'Khóa kho')}
         >
           <Lock className="w-5 h-5" />

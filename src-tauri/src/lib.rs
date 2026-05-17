@@ -130,6 +130,7 @@ pub fn run() {
             run_db_health_check,
             get_customers,
             create_customer,
+            update_customer,
             delete_customer,
             get_access_users,
             create_access_user,

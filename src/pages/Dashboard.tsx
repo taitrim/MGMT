@@ -12,6 +12,7 @@ import { AccountTypeManagerModal } from '../components/features/AccountTypeManag
 import { AppSettingsModal } from '../components/features/AppSettingsModal'
 import { AccessUserManagerModal } from '../components/features/AccessUserManagerModal'
 import { AnimatePresence, motion } from 'framer-motion'
+import { SearchableSelect } from '../components/common/SearchableSelect'
 
 export function Dashboard() {
   const { lock, extendSession, checkSession, storageInfo, loadStorageInfo, dbHealth, checkDbHealth, currentAccessUser } = useAuthStore()
@@ -44,8 +45,13 @@ export function Dashboard() {
   const [filterTag, setFilterTag] = useState('')
   const [filterUpdater, setFilterUpdater] = useState('')
   const [filterExpiryState, setFilterExpiryState] = useState<'all' | 'expired' | 'expiring_30' | 'active'>('all')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(12)
   const isOwnerOrAdmin = !currentAccessUser || currentAccessUser.role === 'owner' || currentAccessUser.role === 'admin'
   const canCreateAccount = !currentAccessUser || currentAccessUser.role === 'owner' || currentAccessUser.role === 'admin' || currentAccessUser.can_create_account
+  const categoryTypeIds = new Set(accountTypes.map((t) => t.id))
+  const createInitialTypeId = categoryTypeIds.has(activeCategory) ? activeCategory : null
+  const createInitialCustomerId = activeCategory === 'customers' ? (selectedCustomerId || null) : null
 
   useEffect(() => {
     fetchAccounts()
@@ -161,6 +167,10 @@ export function Dashboard() {
   const maxTypeCount = topTypes.length > 0 ? Math.max(...topTypes.map((x) => x[1])) : 1
   const typeNameMap = new Map(accountTypes.map((t) => [t.id, t.name]))
   const typeColorMap = new Map(accountTypes.map((t) => [t.id, t.color || '#22c55e']))
+  const totalItems = filteredAccounts.length
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize))
+  const safePage = Math.min(currentPage, totalPages)
+  const pagedAccounts = filteredAccounts.slice((safePage - 1) * pageSize, safePage * pageSize)
 
   const toggleSelected = (id: string) => {
     const next = new Set(selectedIds)
@@ -170,6 +180,16 @@ export function Dashboard() {
   }
 
   const clearSelected = () => setSelectedIds(new Set())
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [activeCategory, searchQuery, filterTag, filterUpdater, filterExpiryState, pageSize, selectedCustomerId])
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
 
   const applyBulkCustomer = async () => {
     const ids = Array.from(selectedIds)
@@ -236,13 +256,13 @@ export function Dashboard() {
           <div className="mb-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
             <div className="surface-card p-4">
               <p className="text-sm text-text-secondary mb-3">Tổng quan tài khoản theo loại</p>
-              <div className="space-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                 {topTypes.length === 0 && <p className="text-xs text-text-tertiary">Chưa có dữ liệu</p>}
                 {topTypes.map(([typeId, count]) => (
-                  <div key={typeId} className="space-y-1">
-                    <div className="flex justify-between text-xs text-text-secondary">
-                      <span>{typeNameMap.get(typeId) || typeId}</span>
-                      <span>{count}</span>
+                  <div key={typeId} className="soft-chip p-2.5 space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-text-secondary truncate pr-2">{typeNameMap.get(typeId) || typeId}</span>
+                      <span className="text-text-primary font-semibold">{count}</span>
                     </div>
                     <div className="h-2 bg-bg-tertiary rounded-full overflow-hidden">
                       <div
@@ -277,20 +297,42 @@ export function Dashboard() {
           <div className="mb-4 surface-card p-3">
             <p className="text-sm text-text-secondary mb-2">Bộ lọc nâng cao</p>
             <div className="flex flex-wrap gap-2 items-center">
-              <select value={filterTag} onChange={(e) => setFilterTag(e.target.value)} className="soft-chip px-2 py-1 text-sm">
-                <option value="">Tất cả tag</option>
-                {availableTags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}
-              </select>
-              <select value={filterUpdater} onChange={(e) => setFilterUpdater(e.target.value)} className="soft-chip px-2 py-1 text-sm">
-                <option value="">Tất cả người cập nhật</option>
-                {availableUpdaters.map((u) => <option key={u} value={u}>{u}</option>)}
-              </select>
-              <select value={filterExpiryState} onChange={(e) => setFilterExpiryState(e.target.value as 'all' | 'expired' | 'expiring_30' | 'active')} className="soft-chip px-2 py-1 text-sm">
-                <option value="all">Mọi trạng thái hạn</option>
-                <option value="expired">Đã hết hạn</option>
-                <option value="expiring_30">Sắp hết hạn (30 ngày)</option>
-                <option value="active">Còn hạn / không hạn</option>
-              </select>
+              <div className="min-w-48">
+                <SearchableSelect
+                  value={filterTag}
+                  onChange={setFilterTag}
+                  options={[{ value: '', label: 'Tất cả tag' }, ...availableTags.map((tag) => ({ value: tag, label: tag }))]}
+                  placeholder="Tất cả tag"
+                  searchPlaceholder="Tìm tag..."
+                />
+              </div>
+              <div className="min-w-56">
+                <SearchableSelect
+                  value={filterUpdater}
+                  onChange={setFilterUpdater}
+                  options={[
+                    { value: '', label: 'Tất cả người cập nhật' },
+                    ...availableUpdaters.map((u) => ({ value: u, label: u })),
+                  ]}
+                  placeholder="Tất cả người cập nhật"
+                  searchPlaceholder="Tìm người cập nhật..."
+                  emptyText="Không có kết quả"
+                  className=""
+                />
+              </div>
+              <div className="min-w-64">
+                <SearchableSelect
+                  value={filterExpiryState}
+                  onChange={(v) => setFilterExpiryState(v as 'all' | 'expired' | 'expiring_30' | 'active')}
+                  options={[
+                    { value: 'all', label: 'Mọi trạng thái hạn' },
+                    { value: 'expired', label: 'Đã hết hạn' },
+                    { value: 'expiring_30', label: 'Sắp hết hạn (30 ngày)' },
+                    { value: 'active', label: 'Còn hạn / không hạn' },
+                  ]}
+                  searchPlaceholder="Tìm trạng thái..."
+                />
+              </div>
               <button onClick={() => { setFilterTag(''); setFilterUpdater(''); setFilterExpiryState('all') }} className="px-2 py-1 rounded soft-chip text-text-secondary hover:text-text-primary">
                 Xóa lọc
               </button>
@@ -314,22 +356,38 @@ export function Dashboard() {
             <div className="mb-4 surface-card p-3 space-y-2">
               <p className="text-sm text-text-secondary">Thao tác hàng loạt ({selectedIds.size} mục)</p>
               <div className="flex flex-wrap gap-2 items-center">
-                <select value={bulkCustomerId} onChange={(e) => setBulkCustomerId(e.target.value)} className="bg-bg-tertiary border border-border-subtle rounded-lg px-2 py-1 text-sm">
-                  <option value="">Không gán khách hàng</option>
-                  {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                <div className="min-w-56">
+                  <SearchableSelect
+                    value={bulkCustomerId}
+                    onChange={setBulkCustomerId}
+                    options={[
+                      { value: '', label: 'Không gán khách hàng' },
+                      ...customers.map((c) => ({ value: c.id, label: c.name })),
+                    ]}
+                    placeholder="Không gán khách hàng"
+                    searchPlaceholder="Tìm khách hàng..."
+                    emptyText="Không có khách hàng"
+                  />
+                </div>
                 <button onClick={applyBulkCustomer} className="px-2 py-1 rounded bg-bg-tertiary text-text-secondary">Áp dụng khách hàng</button>
                 <input value={bulkTag} onChange={(e) => setBulkTag(e.target.value)} placeholder="Thêm tag mới" className="bg-bg-tertiary border border-border-subtle rounded-lg px-2 py-1 text-sm" />
                 <button onClick={applyBulkTag} className="px-2 py-1 rounded bg-bg-tertiary text-text-secondary">Thêm tag</button>
-                <select value={bulkExpiryDays} onChange={(e) => setBulkExpiryDays(Number(e.target.value))} className="bg-bg-tertiary border border-border-subtle rounded-lg px-2 py-1 text-sm">
-                  <option value={1}>1 ngày</option>
-                  <option value={7}>1 tuần</option>
-                  <option value={30}>1 tháng</option>
-                  <option value={90}>3 tháng</option>
-                  <option value={180}>6 tháng</option>
-                  <option value={365}>1 năm</option>
-                  <option value={730}>2 năm</option>
-                </select>
+                <div className="min-w-48">
+                  <SearchableSelect
+                    value={String(bulkExpiryDays)}
+                    onChange={(v) => setBulkExpiryDays(Number(v))}
+                    options={[
+                      { value: '1', label: '1 ngày' },
+                      { value: '7', label: '1 tuần' },
+                      { value: '30', label: '1 tháng' },
+                      { value: '90', label: '3 tháng' },
+                      { value: '180', label: '6 tháng' },
+                      { value: '365', label: '1 năm' },
+                      { value: '730', label: '2 năm' },
+                    ]}
+                    searchPlaceholder="Tìm mốc thời gian..."
+                  />
+                </div>
                 <button onClick={applyBulkExpiry} className="px-2 py-1 rounded bg-bg-tertiary text-text-secondary">Đặt thời hạn</button>
                 <button onClick={clearSelected} className="px-2 py-1 rounded bg-red-500/20 text-red-300">Bỏ chọn</button>
               </div>
@@ -357,8 +415,6 @@ export function Dashboard() {
                 </div>
               ))}
             </motion.div>
-          ) : selectedAccount ? (
-            <AccountDetail account={selectedAccount} onClose={() => useVaultStore.getState().selectAccount(null)} />
           ) : activeCategory !== 'customers' ? (
             <AnimatePresence mode="wait">
               <motion.div
@@ -369,7 +425,7 @@ export function Dashboard() {
                 transition={{ duration: 0.18 }}
               >
                 <AccountList
-                  accounts={filteredAccounts}
+                  accounts={pagedAccounts}
                   viewMode={viewMode}
                   onSelectAccount={(account) => useVaultStore.getState().selectAccount(account)}
                   selectedIds={selectedIds}
@@ -378,11 +434,75 @@ export function Dashboard() {
               </motion.div>
             </AnimatePresence>
           ) : null}
+
+          {!isLoading && !selectedAccount && activeCategory !== 'customers' && totalItems > 0 && (
+            <div className="mt-4 surface-card p-3 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm text-text-secondary">
+                Hiển thị {Math.min((safePage - 1) * pageSize + 1, totalItems)} - {Math.min(safePage * pageSize, totalItems)} / {totalItems}
+              </p>
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-text-secondary">Giới hạn:</label>
+                <SearchableSelect
+                  value={String(pageSize)}
+                  onChange={(v) => setPageSize(Number(v))}
+                  options={[
+                    { value: '12', label: '12 / trang' },
+                    { value: '24', label: '24 / trang' },
+                    { value: '48', label: '48 / trang' },
+                    { value: '96', label: '96 / trang' },
+                  ]}
+                  searchPlaceholder="Chọn giới hạn..."
+                  className="w-36"
+                />
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={safePage <= 1}
+                  className="px-3 py-2 rounded-lg bg-bg-tertiary border border-border-subtle text-text-secondary disabled:opacity-50"
+                >
+                  Trước
+                </button>
+                <span className="text-sm text-text-secondary">Trang {safePage}/{totalPages}</span>
+                <button
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={safePage >= totalPages}
+                  className="px-3 py-2 rounded-lg bg-bg-tertiary border border-border-subtle text-text-secondary disabled:opacity-50"
+                >
+                  Sau
+                </button>
+              </div>
+            </div>
+          )}
         </main>
       </div>
 
       <AnimatePresence>
-        {showCreateModal && <CreateAccountModal onClose={() => setShowCreateModal(false)} />}
+        {selectedAccount && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) {
+                useVaultStore.getState().selectAccount(null)
+              }
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.98, y: 8 }}
+              transition={{ duration: 0.16 }}
+              className="w-full max-w-7xl max-h-[94vh] overflow-y-auto"
+            >
+              <AccountDetail account={selectedAccount} onClose={() => useVaultStore.getState().selectAccount(null)} />
+            </motion.div>
+          </div>
+        )}
+        {showCreateModal && (
+          <CreateAccountModal
+            initialTypeId={createInitialTypeId}
+            initialCustomerId={createInitialCustomerId}
+            onClose={() => setShowCreateModal(false)}
+          />
+        )}
         {showCustomerModal && <CustomerManagerModal onClose={() => setShowCustomerModal(false)} />}
         {showTypeModal && <AccountTypeManagerModal onClose={() => setShowTypeModal(false)} />}
         {showAccessUserModal && <AccessUserManagerModal onClose={() => setShowAccessUserModal(false)} />}

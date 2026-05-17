@@ -3,9 +3,13 @@ import { useVaultStore, AccountType, FieldValue } from '../../stores/vaultStore'
 import { motion } from 'framer-motion'
 import { X, Plus, RefreshCw, Eye, EyeOff } from 'lucide-react'
 import { t, useI18nStore } from '../../stores/i18nStore'
+import { SearchableSelect } from '../common/SearchableSelect'
+import { DatePickerInput } from '../common/DatePickerInput'
 
 interface CreateAccountModalProps {
   onClose: () => void
+  initialTypeId?: string | null
+  initialCustomerId?: string | null
 }
 
 const todayYmd = () => new Date().toISOString().slice(0, 10)
@@ -19,7 +23,7 @@ const EXPIRY_PRESETS = [
   { label: '2 năm', days: 730 },
 ]
 
-export function CreateAccountModal({ onClose }: CreateAccountModalProps) {
+export function CreateAccountModal({ onClose, initialTypeId = null, initialCustomerId = null }: CreateAccountModalProps) {
   const { accountTypes, customers, fetchCustomers, createAccount, generatePassword } = useVaultStore()
   const { language } = useI18nStore()
   const [selectedType, setSelectedType] = useState<AccountType | null>(null)
@@ -34,6 +38,12 @@ export function CreateAccountModal({ onClose }: CreateAccountModalProps) {
   const [visibleFields, setVisibleFields] = useState<Set<number>>(new Set())
   const [isCreating, setIsCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const detectAutoGroup = (key: string): 'identity' | 'connection' | 'detail' => {
+    const k = key.toLowerCase()
+    if (k === 'username' || k === 'user' || k === 'login' || k === 'email' || k === 'account') return 'identity'
+    if (k.includes('url') || k.includes('host') || k.includes('server') || k.includes('ip') || k.includes('port') || k.includes('endpoint') || k.includes('domain') || k.includes('panel')) return 'connection'
+    return 'detail'
+  }
 
   useEffect(() => {
     if (selectedType) {
@@ -44,6 +54,19 @@ export function CreateAccountModal({ onClose }: CreateAccountModalProps) {
       }))
     }
   }, [selectedType])
+
+  useEffect(() => {
+    if (!initialTypeId) return
+    const matched = accountTypes.find((t) => t.id === initialTypeId)
+    if (matched) {
+      setSelectedType(matched)
+    }
+  }, [initialTypeId, accountTypes])
+
+  useEffect(() => {
+    if (!initialCustomerId) return
+    setSelectedCustomerId(initialCustomerId)
+  }, [initialCustomerId])
 
   useEffect(() => {
     fetchCustomers()
@@ -87,10 +110,14 @@ export function CreateAccountModal({ onClose }: CreateAccountModalProps) {
 
     if (field.type === 'select') {
       return (
-        <select value={field.value} onChange={(e) => handleFieldChange(index, e.target.value)} className="flex-1 bg-bg-tertiary border border-border-subtle rounded-xl px-4 py-2 text-text-primary">
-          <option value="">Chọn giá trị</option>
-          {options.map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>
+        <SearchableSelect
+          value={field.value}
+          onChange={(v) => handleFieldChange(index, v)}
+          options={[{ value: '', label: 'Chọn giá trị' }, ...options.map((o) => ({ value: o, label: o }))]}
+          placeholder="Chọn giá trị"
+          searchPlaceholder="Tìm giá trị..."
+          className="flex-1"
+        />
       )
     }
 
@@ -98,18 +125,16 @@ export function CreateAccountModal({ onClose }: CreateAccountModalProps) {
       const selectedValues = field.value ? field.value.split(',').map((v) => v.trim()).filter(Boolean) : []
       return (
         <div className="flex-1 space-y-2">
-          <select
-            onChange={(e) => {
-              const v = e.target.value
+          <SearchableSelect
+            value=""
+            onChange={(v) => {
               if (!v) return
               if (!selectedValues.includes(v)) handleFieldChange(index, [...selectedValues, v].join(', '))
-              e.currentTarget.value = ''
             }}
-            className="w-full bg-bg-tertiary border border-border-subtle rounded-xl px-4 py-2 text-text-primary"
-          >
-            <option value="">Thêm giá trị</option>
-            {options.map((o) => <option key={o} value={o}>{o}</option>)}
-          </select>
+            options={[{ value: '', label: 'Thêm giá trị' }, ...options.map((o) => ({ value: o, label: o }))]}
+            placeholder="Thêm giá trị"
+            searchPlaceholder="Tìm giá trị..."
+          />
           <input type="text" value={field.value} onChange={(e) => handleFieldChange(index, e.target.value)} placeholder="Nhập nhiều giá trị, cách nhau dấu phẩy" className="w-full bg-bg-tertiary border border-border-subtle rounded-xl px-4 py-2 text-text-primary" />
         </div>
       )
@@ -124,9 +149,11 @@ export function CreateAccountModal({ onClose }: CreateAccountModalProps) {
       )
     }
 
-    return (
-      <input type={field.type === 'email' ? 'email' : field.type === 'url' ? 'url' : field.type === 'date' ? 'date' : 'text'} value={field.value} onChange={(e) => handleFieldChange(index, e.target.value)} placeholder={field.key} className="flex-1 bg-bg-tertiary border border-border-subtle rounded-xl px-4 py-2 text-text-primary" />
-    )
+    if (field.type === 'date') {
+      return <DatePickerInput value={field.value} onChange={(v) => handleFieldChange(index, v)} className="flex-1" />
+    }
+
+    return <input type={field.type === 'email' ? 'email' : field.type === 'url' ? 'url' : 'text'} value={field.value} onChange={(e) => handleFieldChange(index, e.target.value)} placeholder={field.key} className="flex-1 bg-bg-tertiary border border-border-subtle rounded-xl px-4 py-2 text-text-primary" />
   }
 
   const handleSubmit = async () => {
@@ -178,44 +205,66 @@ export function CreateAccountModal({ onClose }: CreateAccountModalProps) {
     }
   }
 
+  const fieldDefByKey = new Map((selectedType?.fields || []).map((f) => [f.key, f]))
+  const labelForField = (key: string) => fieldDefByKey.get(key)?.name || key
+  const isRequiredField = (key: string) => !!fieldDefByKey.get(key)?.required
+  const resolveGroup = (key: string): 'identity' | 'connection' | 'detail' => {
+    const configured = fieldDefByKey.get(key)?.field_group
+    if (configured === 'identity' || configured === 'connection' || configured === 'detail') return configured
+    return detectAutoGroup(key)
+  }
+  const loginAndPasswordFields = fields.filter((f) => f.type === 'password' || ['identity', 'connection'].includes(resolveGroup(f.key)))
+  const identityFields = loginAndPasswordFields.filter((f) => f.type !== 'password' && resolveGroup(f.key) === 'identity')
+  const connectionFields = loginAndPasswordFields.filter((f) => f.type !== 'password' && resolveGroup(f.key) === 'connection')
+  const passwordOnlyFields = loginAndPasswordFields.filter((f) => f.type === 'password')
+  const otherDynamicFields = fields.filter((f) => !(f.type === 'password' || ['identity', 'connection'].includes(resolveGroup(f.key))))
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="w-full max-w-2xl max-h-[90vh] bg-bg-secondary border border-border-subtle rounded-2xl overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between p-6 border-b border-border-subtle">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="w-full max-w-6xl max-h-[94vh] modal-panel border border-border-subtle rounded-2xl overflow-hidden flex flex-col shadow-2xl">
+        <div className="flex items-center justify-between p-6 border-b border-border-subtle bg-gradient-to-r from-sky-500/10 via-violet-500/5 to-emerald-500/10">
           <h2 className="text-xl font-semibold text-text-primary">{t(language, 'Create New Item', 'Tạo mục mới')}</h2>
           <button onClick={onClose} className="p-2 text-text-tertiary hover:text-text-secondary hover:bg-bg-hover rounded-lg transition-colors"><X className="w-5 h-5" /></button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          <div>
+        <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <div className="premium-section section-sky p-4">
             <label className="text-sm font-medium text-text-secondary mb-2 block">{t(language, 'Name', 'Tên')}</label>
             <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder={t(language, 'Item name', 'Tên mục')} className="w-full bg-bg-tertiary border border-border-subtle rounded-xl px-4 py-3 text-text-primary" autoFocus />
           </div>
 
-          <div>
+          <div className="premium-section section-sky p-4">
             <label className="text-sm font-medium text-text-secondary mb-2 block">{t(language, 'Category', 'Danh mục')}</label>
-            <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-              {accountTypes.map((type) => (
-                <button key={type.id} onClick={() => setSelectedType(type)} className={`p-3 rounded-xl border text-center ${selectedType?.id === type.id ? 'border-accent-primary bg-accent-primary/10 text-accent-primary' : 'border-border-subtle bg-bg-tertiary text-text-secondary'}`}>
-                  <span className="text-xs">{type.name}</span>
-                </button>
-              ))}
-            </div>
+            <SearchableSelect
+              value={selectedType?.id || ''}
+              onChange={(v) => setSelectedType(accountTypes.find((t) => t.id === v) || null)}
+              options={accountTypes.map((type) => ({ value: type.id, label: type.name }))}
+              placeholder={t(language, 'Select category', 'Chọn danh mục')}
+              searchPlaceholder={t(language, 'Search category...', 'Tìm danh mục...')}
+              emptyText={t(language, 'No category found', 'Không tìm thấy danh mục')}
+            />
           </div>
 
-          <div>
+          <div className="premium-section section-sky p-4">
             <label className="text-sm font-medium text-text-secondary mb-2 block">{t(language, 'Customer', 'Khách hàng')}</label>
-            <select value={selectedCustomerId} onChange={(e) => setSelectedCustomerId(e.target.value)} className="w-full bg-bg-tertiary border border-border-subtle rounded-xl px-4 py-3 text-text-primary">
-              <option value="">{t(language, 'No customer', 'Không gán khách hàng')}</option>
-              {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={selectedCustomerId}
+              onChange={setSelectedCustomerId}
+              options={[
+                { value: '', label: t(language, 'No customer', 'Không gán khách hàng') },
+                ...customers.map((customer) => ({ value: customer.id, label: customer.name })),
+              ]}
+              placeholder={t(language, 'No customer', 'Không gán khách hàng')}
+              searchPlaceholder={t(language, 'Search customer...', 'Tìm khách hàng...')}
+              emptyText={t(language, 'No customer found', 'Không tìm thấy khách hàng')}
+            />
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-3 premium-section section-emerald p-4">
             <label className="text-sm font-medium text-text-secondary block">Thông tin thời hạn</label>
             <div>
               <label className="text-xs text-text-tertiary mb-1 block">Ngày tạo / ngày mua</label>
-              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full bg-bg-tertiary border border-border-subtle rounded-xl px-4 py-2 text-text-primary" />
+              <DatePickerInput value={startDate} onChange={setStartDate} className="w-full" />
             </div>
             <label className="flex items-center gap-2 text-sm text-text-secondary">
               <input type="checkbox" checked={hasExpiry} onChange={(e) => setHasExpiry(e.target.checked)} />
@@ -228,23 +277,48 @@ export function CreateAccountModal({ onClose }: CreateAccountModalProps) {
                   <button type="button" onClick={() => setExpiryMode('date')} className={`px-3 py-1.5 rounded-lg text-xs ${expiryMode === 'date' ? 'bg-accent-primary/10 text-accent-primary' : 'bg-bg-tertiary text-text-secondary'}`}>Chọn ngày hết hạn</button>
                 </div>
                 {expiryMode === 'date' ? (
-                  <input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} className="w-full bg-bg-tertiary border border-border-subtle rounded-xl px-4 py-2 text-text-primary" />
+                  <DatePickerInput value={expiryDate} onChange={setExpiryDate} className="w-full" />
                 ) : (
-                  <select value={expiryPresetDays} onChange={(e) => setExpiryPresetDays(Number(e.target.value))} className="w-full bg-bg-tertiary border border-border-subtle rounded-xl px-4 py-2 text-text-primary">
-                    {EXPIRY_PRESETS.map((p) => <option key={p.days} value={p.days}>{p.label}</option>)}
-                  </select>
+                  <SearchableSelect
+                    value={String(expiryPresetDays)}
+                    onChange={(v) => setExpiryPresetDays(Number(v))}
+                    options={EXPIRY_PRESETS.map((p) => ({ value: String(p.days), label: p.label }))}
+                    searchPlaceholder="Tìm mốc thời gian..."
+                  />
                 )}
               </div>
             )}
           </div>
 
-          {selectedType && fields.length > 0 && (
-            <div className="space-y-4">
-              <h3 className="text-sm font-medium text-text-secondary">{t(language, 'Details', 'Chi tiết')}</h3>
-              {fields.map((field, index) => {
+          {selectedType && loginAndPasswordFields.length > 0 && (
+            <div className="space-y-4 premium-section section-amber p-4">
+              <h3 className="text-sm font-medium text-text-secondary">Thông tin đăng nhập & mật khẩu</h3>
+              {identityFields.length > 0 && <p className="text-xs uppercase tracking-wide text-sky-300/90">Danh tính</p>}
+              {identityFields.map((field) => {
+                const index = fields.findIndex((f) => f.key === field.key)
                 return (
                   <div key={field.key}>
-                    <label className="text-xs text-text-tertiary mb-1 block">{selectedType.fields.find((f) => f.key === field.key)?.name || field.key}{selectedType.fields.find((f) => f.key === field.key)?.required && '*'}</label>
+                    <label className="text-xs text-text-tertiary mb-1 block">{labelForField(field.key)}{isRequiredField(field.key) && '*'}</label>
+                    <div className="flex gap-2">{renderDynamicField(field, index)}</div>
+                  </div>
+                )
+              })}
+              {connectionFields.length > 0 && <p className="text-xs uppercase tracking-wide text-emerald-300/90">Kết nối</p>}
+              {connectionFields.map((field) => {
+                const index = fields.findIndex((f) => f.key === field.key)
+                return (
+                  <div key={field.key}>
+                    <label className="text-xs text-text-tertiary mb-1 block">{labelForField(field.key)}{isRequiredField(field.key) && '*'}</label>
+                    <div className="flex gap-2">{renderDynamicField(field, index)}</div>
+                  </div>
+                )
+              })}
+              {passwordOnlyFields.length > 0 && <p className="text-xs uppercase tracking-wide text-amber-300/90">Mật khẩu</p>}
+              {passwordOnlyFields.map((field) => {
+                const index = fields.findIndex((f) => f.key === field.key)
+                return (
+                  <div key={field.key}>
+                    <label className="text-xs text-text-tertiary mb-1 block">{labelForField(field.key)}{isRequiredField(field.key) && '*'}</label>
                     <div className="flex gap-2">{renderDynamicField(field, index)}</div>
                   </div>
                 )
@@ -252,10 +326,25 @@ export function CreateAccountModal({ onClose }: CreateAccountModalProps) {
             </div>
           )}
 
-          {error && <motion.p initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-red-500 text-sm">{error}</motion.p>}
+          {selectedType && otherDynamicFields.length > 0 && (
+            <div className="space-y-4 premium-section section-violet p-4">
+              <h3 className="text-sm font-medium text-text-secondary">{t(language, 'Details', 'Chi tiết')}</h3>
+              {otherDynamicFields.map((field) => {
+                const index = fields.findIndex((f) => f.key === field.key)
+                return (
+                  <div key={field.key}>
+                    <label className="text-xs text-text-tertiary mb-1 block">{labelForField(field.key)}{isRequiredField(field.key) && '*'}</label>
+                    <div className="flex gap-2">{renderDynamicField(field, index)}</div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {error && <motion.p initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-red-500 text-sm lg:col-span-2">{error}</motion.p>}
         </div>
 
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-border-subtle">
+        <div className="sticky bottom-0 z-10 flex items-center justify-end gap-3 p-6 border-t border-border-subtle bg-bg-secondary/95 backdrop-blur">
           <button onClick={onClose} className="px-4 py-2 text-text-secondary hover:text-text-primary">{t(language, 'Cancel', 'Hủy')}</button>
           <button onClick={handleSubmit} disabled={isCreating || !name.trim()} className="px-6 py-2 bg-accent-primary hover:bg-accent-primary-hover disabled:opacity-50 text-bg-primary font-medium rounded-xl flex items-center gap-2">
             {isCreating ? <><RefreshCw className="w-4 h-4 animate-spin" /> {t(language, 'Creating...', 'Đang tạo...')}</> : <><Plus className="w-4 h-4" /> {t(language, 'Create', 'Tạo')}</>}

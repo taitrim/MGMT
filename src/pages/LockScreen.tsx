@@ -29,7 +29,7 @@ export function LockScreen() {
           animate={{ opacity: 1, scale: 1 }}
           className="w-full max-w-md"
         >
-          <div className="bg-bg-secondary border border-border-subtle rounded-2xl p-8">
+          <div className="modal-panel border border-border-subtle rounded-2xl p-8">
             <div className="flex flex-col items-center mb-8">
               <div className="w-16 h-16 bg-accent-primary/10 rounded-2xl flex items-center justify-center mb-4">
                 <Shield className="w-8 h-8 text-accent-primary" />

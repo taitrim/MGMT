@@ -87,10 +87,10 @@ export function Sidebar({
   const { language } = useI18nStore()
 
   return (
-    <aside className="w-64 h-screen bg-bg-secondary border-r border-border-subtle flex flex-col">
-      <div className="p-4 border-b border-border-subtle">
+    <aside className="w-72 h-screen bg-bg-secondary/75 backdrop-blur-xl border-r border-border-subtle flex flex-col shadow-2xl">
+      <div className="p-5 border-b border-border-subtle">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-accent-primary/10 rounded-xl flex items-center justify-center">
+          <div className="w-11 h-11 bg-accent-primary/12 rounded-2xl flex items-center justify-center border border-white/20">
             <Shield className="w-5 h-5 text-accent-primary" />
           </div>
           <div>
@@ -103,16 +103,16 @@ export function Sidebar({
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto py-2 px-2">
+      <nav className="flex-1 overflow-y-auto py-3 px-3">
         <div className="space-y-1">
           {navItems.map((item) => (
             <button
               key={item.id}
               onClick={() => onCategoryChange(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-left ${
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl transition-all text-left ${
                 activeCategory === item.id
-                  ? 'text-accent-primary bg-accent-primary/10'
-                  : 'text-text-secondary hover:text-text-primary hover:bg-bg-hover'
+                  ? 'text-accent-primary bg-white/12 border border-white/25 shadow-md'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-white/8'
               }`}
             >
               <item.icon className={`w-4 h-4 ${activeCategory === item.id ? 'text-accent-primary' : ''}`} />
@@ -127,21 +127,21 @@ export function Sidebar({
           </p>
           <button
             onClick={onManageCustomers}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors text-left"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-text-secondary hover:text-text-primary hover:bg-white/8 transition-all text-left"
           >
             <Users className="w-4 h-4" />
             <span className="text-sm font-medium">{t(language, 'Customer Management', 'Quản lý khách hàng')}</span>
           </button>
           <button
             onClick={() => setShowAuditModal(true)}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors text-left"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-text-secondary hover:text-text-primary hover:bg-white/8 transition-all text-left"
           >
             <History className="w-4 h-4" />
             <span className="text-sm font-medium">{t(language, 'Activity Log', 'Nhật ký hoạt động')}</span>
           </button>
           <button
             onClick={onManageTypes}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors text-left"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-text-secondary hover:text-text-primary hover:bg-white/8 transition-all text-left"
           >
             <SlidersHorizontal className="w-4 h-4" />
             <span className="text-sm font-medium">Mẫu trường tài khoản</span>
@@ -149,7 +149,7 @@ export function Sidebar({
           {canManageAccessUsers && (
             <button
               onClick={onManageAccessUsers}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors text-left"
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-text-secondary hover:text-text-primary hover:bg-white/8 transition-all text-left"
             >
               <Users className="w-4 h-4" />
               <span className="text-sm font-medium">Phân quyền user</span>
@@ -158,7 +158,7 @@ export function Sidebar({
           {canManageSecurity && (
             <button
               onClick={onOpenSettings}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors text-left"
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-text-secondary hover:text-text-primary hover:bg-white/8 transition-all text-left"
             >
               <Settings className="w-4 h-4" />
               <span className="text-sm font-medium">{t(language, 'App Settings', 'Thiết lập ứng dụng')}</span>
@@ -169,7 +169,7 @@ export function Sidebar({
 
       {stats && (
         <div className="p-4 border-t border-border-subtle">
-          <div className="bg-bg-tertiary rounded-xl p-4 space-y-3">
+          <div className="bg-bg-tertiary/70 backdrop-blur rounded-2xl p-4 space-y-3 border border-white/20">
             <div className="flex justify-between text-sm">
               <span className="text-text-tertiary">{t(language, 'Total Items', 'Tổng mục')}</span>
               <span className="text-text-primary font-medium">{stats.total_accounts}</span>
@@ -190,7 +190,7 @@ export function Sidebar({
         <div className="p-4 border-t border-border-subtle">
           <button
             onClick={onCreateAccount}
-            className="w-full flex items-center justify-center gap-2 bg-accent-primary hover:bg-accent-primary-hover text-bg-primary font-medium py-2.5 rounded-xl transition-colors"
+            className="w-full flex items-center justify-center gap-2 bg-accent-primary hover:bg-accent-primary-hover text-bg-primary font-semibold py-3 rounded-2xl transition-all shadow-lg"
           >
             <Plus className="w-4 h-4" />
             <span>{t(language, 'New Item', 'Mục mới')}</span>
