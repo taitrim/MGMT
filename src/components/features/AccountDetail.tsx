@@ -8,6 +8,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { copyToClipboardSecure } from '../../utils/clipboard'
 import { t, useI18nStore } from '../../stores/i18nStore'
 import { useAuthStore } from '../../stores/authStore'
+import { SearchableSelect } from '../common/SearchableSelect'
 
 interface AccountDetailProps {
   account: Account
@@ -31,10 +32,23 @@ export function AccountDetail({ account, onClose }: AccountDetailProps) {
   const [pendingRevealField, setPendingRevealField] = useState<string | null>(null)
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
   const [confirmRevealField, setConfirmRevealField] = useState<string | null>(null)
+  const [connectApp, setConnectApp] = useState(() => localStorage.getItem('quick_connect_app') || 'system')
+  const [connectStatus, setConnectStatus] = useState<string | null>(null)
+  const [customExe, setCustomExe] = useState(() => localStorage.getItem('quick_connect_custom_exe') || '')
+  const [customArgs, setCustomArgs] = useState(() => localStorage.getItem('quick_connect_custom_args') || '{target}')
 
   useEffect(() => {
     loadFields()
   }, [account.id])
+  useEffect(() => {
+    localStorage.setItem('quick_connect_app', connectApp)
+  }, [connectApp])
+  useEffect(() => {
+    localStorage.setItem('quick_connect_custom_exe', customExe)
+  }, [customExe])
+  useEffect(() => {
+    localStorage.setItem('quick_connect_custom_args', customArgs)
+  }, [customArgs])
 
   const loadFields = async () => {
     const data = await getAccountFields(account.id)
@@ -136,6 +150,111 @@ export function AccountDetail({ account, onClose }: AccountDetailProps) {
   }
 
   const accountType = accountTypes.find(t => t.id === account.account_type_id)
+  const fieldMap = new Map(fields.map((f) => [f.field_key.toLowerCase(), f.value?.trim() || '']))
+  const pick = (...keys: string[]) => keys.map((k) => fieldMap.get(k)).find((v) => !!v) || ''
+  const host = pick('host', 'hostname', 'server', 'ip', 'address', 'domain')
+  const username = pick('username', 'user', 'login')
+  const port = pick('port')
+  const rawUrl = pick('url', 'website', 'endpoint', 'panel_url')
+  const typeName = (accountType?.name || '').toLowerCase()
+
+  const buildConnectionTarget = () => {
+    if (rawUrl) {
+      return { protocol: 'url', target: rawUrl.startsWith('http://') || rawUrl.startsWith('https://') ? rawUrl : `https://${rawUrl}` }
+    }
+    if (typeName.includes('rdp')) {
+      return { protocol: 'rdp', target: port ? `${host}:${port}` : host }
+    }
+    if (typeName.includes('ssh') && host) {
+      const auth = username ? `${encodeURIComponent(username)}@` : ''
+      const portPart = port ? `:${port}` : ''
+      return { protocol: 'ssh', target: `ssh://${auth}${host}${portPart}` }
+    }
+    if (typeName.includes('ftp') && host) {
+      const auth = username ? `${encodeURIComponent(username)}@` : ''
+      const portPart = port ? `:${port}` : ''
+      return { protocol: 'sftp', target: `sftp://${auth}${host}${portPart}` }
+    }
+    if (typeName.includes('vpn') && host) {
+      const portPart = port ? `:${port}` : ''
+      return { protocol: 'url', target: `https://${host}${portPart}` }
+    }
+    if (typeName.includes('router') && host) {
+      const portPart = port ? `:${port}` : ''
+      return { protocol: 'url', target: `http://${host}${portPart}` }
+    }
+    if (host) {
+      const portPart = port ? `:${port}` : ''
+      return { protocol: 'url', target: `https://${host}${portPart}` }
+    }
+    return null
+  }
+
+  const inferProtocol = () => {
+    if (typeName.includes('rdp')) return 'rdp'
+    if (typeName.includes('ssh')) return 'ssh'
+    if (typeName.includes('ftp') || typeName.includes('sftp')) return 'sftp'
+    if (typeName.includes('website')) return 'url'
+    if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) return 'url'
+    if (rawUrl.startsWith('ftp://') || rawUrl.startsWith('sftp://')) return 'sftp'
+    return 'url'
+  }
+
+  const resolvePort = () => {
+    const p = Number(port)
+    if (Number.isFinite(p) && p > 0 && p < 65536) return p
+    const proto = inferProtocol()
+    if (proto === 'rdp') return 3389
+    if (proto === 'ssh') return 22
+    if (proto === 'sftp') return 22
+    if (proto === 'url') return 443
+    return 0
+  }
+
+  const openQuickConnection = async () => {
+    try {
+      const payload = buildConnectionTarget()
+      if (!payload) {
+        alert(t(language, 'No connection information found', 'Không tìm thấy thông tin kết nối'))
+        return
+      }
+      await invoke('open_connection_with_app', {
+        protocol: inferProtocol(),
+        host,
+        port: resolvePort(),
+        username: username || null,
+        target: payload.target,
+        app: connectApp,
+        customExe: connectApp === 'custom' ? customExe : null,
+        customArgs: connectApp === 'custom' ? customArgs.split(/\s+/).filter(Boolean) : null,
+      })
+    } catch (e) {
+      alert(String(e))
+    }
+  }
+
+  const testConnection = async () => {
+    try {
+      if (!host) {
+        setConnectStatus('Không có host/ip để kiểm tra')
+        return
+      }
+      setConnectStatus('Đang kiểm tra kết nối...')
+      const result = await invoke<{ reachable: boolean; message: string; latency_ms?: number | null }>('test_connection_target', {
+        host,
+        port: resolvePort(),
+        timeoutMs: 3000,
+      })
+      if (result.reachable) {
+        setConnectStatus(`Kết nối OK (${result.latency_ms ?? '-'} ms)`)
+      } else {
+        setConnectStatus(`Lỗi: ${result.message}`)
+      }
+    } catch (e) {
+      setConnectStatus(String(e))
+    }
+  }
+
   const fieldNameByKey = new Map((accountType?.fields || []).map((f) => [f.key, f.name]))
   const fieldGroupByKey = new Map((accountType?.fields || []).map((f) => [f.key, f.field_group || null]))
   const detectAutoGroup = (key: string): 'identity' | 'connection' | 'detail' => {
@@ -150,6 +269,7 @@ export function AccountDetail({ account, onClose }: AccountDetailProps) {
     return detectAutoGroup(key)
   }
   const loginAddressFields = fields.filter((f) => {
+    if (f.field_type === 'password') return false
     const g = resolveGroup(f.field_key)
     return g === 'identity' || g === 'connection'
   })
@@ -221,6 +341,36 @@ export function AccountDetail({ account, onClose }: AccountDetailProps) {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <div className="w-44">
+              <SearchableSelect
+                value={connectApp}
+                onChange={setConnectApp}
+                options={[
+                  { value: 'system', label: 'Mặc định hệ thống' },
+                  { value: 'browser', label: 'Trình duyệt mặc định' },
+                  { value: 'chrome', label: 'Google Chrome' },
+                  { value: 'edge', label: 'Microsoft Edge' },
+                  { value: 'firefox', label: 'Mozilla Firefox' },
+                  { value: 'putty', label: 'PuTTY (SSH)' },
+                  { value: 'winscp', label: 'WinSCP (SFTP/FTP)' },
+                  { value: 'rdp', label: 'Remote Desktop' },
+                  { value: 'custom', label: 'Ứng dụng tùy chỉnh' },
+                ]}
+                searchPlaceholder="Tìm app..."
+              />
+            </div>
+            <button
+              onClick={testConnection}
+              className="px-3 py-2 rounded-lg text-xs font-medium text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 transition-colors"
+            >
+              Test kết nối
+            </button>
+            <button
+              onClick={openQuickConnection}
+              className="px-3 py-2 rounded-lg text-xs font-medium text-sky-300 bg-sky-500/10 hover:bg-sky-500/20 transition-colors"
+            >
+              {t(language, 'Quick Connect', 'Kết nối nhanh')}
+            </button>
             <button
               onClick={handleToggleFavorite}
               className={`p-2 rounded-lg transition-colors ${
@@ -242,6 +392,29 @@ export function AccountDetail({ account, onClose }: AccountDetailProps) {
 
         <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-5">
           <div className="space-y-5">
+            {connectApp === 'custom' && (
+              <div className="premium-section section-amber p-4 space-y-2">
+                <p className="text-xs text-text-tertiary">Ứng dụng tùy chỉnh</p>
+                <input
+                  value={customExe}
+                  onChange={(e) => setCustomExe(e.target.value)}
+                  placeholder="Đường dẫn exe, ví dụ: C:\\Program Files\\PuTTY\\putty.exe"
+                  className="w-full bg-bg-tertiary border border-border-subtle rounded-xl px-3 py-2 text-sm text-text-primary"
+                />
+                <input
+                  value={customArgs}
+                  onChange={(e) => setCustomArgs(e.target.value)}
+                  placeholder="Tham số, ví dụ: {target} hoặc -ssh {host} -P {port} -l {username}"
+                  className="w-full bg-bg-tertiary border border-border-subtle rounded-xl px-3 py-2 text-sm text-text-primary"
+                />
+                <p className="text-[11px] text-text-tertiary">Biến hỗ trợ: {'{target}'} {'{host}'} {'{port}'} {'{username}'}</p>
+              </div>
+            )}
+            {connectStatus && (
+              <div className="text-xs px-3 py-2 rounded-lg border border-border-subtle bg-bg-tertiary text-text-secondary">
+                {connectStatus}
+              </div>
+            )}
             {hasTotp && (
             <div className="premium-section section-emerald p-4">
               <h3 className="text-sm font-medium text-text-tertiary mb-3">{t(language, 'Two-Factor Authentication', 'Xác thực hai lớp')}</h3>

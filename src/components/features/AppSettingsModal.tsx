@@ -45,6 +45,9 @@ export function AppSettingsModal({ onClose }: AppSettingsModalProps) {
   } | null>(null)
   const [isDryRunning, setIsDryRunning] = useState(false)
   const [isRestoring, setIsRestoring] = useState(false)
+  const [autoBackupEnabled, setAutoBackupEnabled] = useState(localStorage.getItem('auto_backup_enabled') === '1')
+  const [autoBackupMinutes, setAutoBackupMinutes] = useState(Number(localStorage.getItem('auto_backup_minutes') || '60'))
+  const [restoreConfirmText, setRestoreConfirmText] = useState('')
 
   useEffect(() => {
     setDbPath(storageInfo?.db_path || '')
@@ -140,6 +143,13 @@ export function AppSettingsModal({ onClose }: AppSettingsModalProps) {
     }
   }
 
+  const saveAutoBackupSettings = () => {
+    localStorage.setItem('auto_backup_enabled', autoBackupEnabled ? '1' : '0')
+    localStorage.setItem('auto_backup_minutes', String(Math.max(10, autoBackupMinutes || 60)))
+    localStorage.setItem('auto_backup_dir', backupDir.trim())
+    setMessage('Đã lưu lịch backup tự động.')
+  }
+
   const handleDryRunRestore = async () => {
     if (!restorePath.trim()) {
       setMessage('Vui lòng nhập đường dẫn file backup (.svb).')
@@ -172,11 +182,16 @@ export function AppSettingsModal({ onClose }: AppSettingsModalProps) {
       setMessage('Cần dry-run hợp lệ trước khi restore.')
       return
     }
+    if (restoreConfirmText.trim().toUpperCase() !== 'RESTORE') {
+      setMessage('Vui lòng nhập RESTORE để xác nhận.')
+      return
+    }
     setIsRestoring(true)
     setMessage(null)
     try {
       await importVault(restorePath.trim())
       setMessage('Restore hoàn tất. Vui lòng khóa/mở lại hoặc khởi động lại ứng dụng để nạp dữ liệu mới.')
+      setRestoreConfirmText('')
     } catch (error) {
       setMessage(String(error))
     } finally {
@@ -261,6 +276,15 @@ export function AppSettingsModal({ onClose }: AppSettingsModalProps) {
             <button onClick={handleQuickBackup} disabled={isBackingUp} className="px-3 py-2 rounded-lg bg-accent-primary text-bg-primary disabled:opacity-50">
               {isBackingUp ? 'Đang backup...' : 'Backup ngay'}
             </button>
+            <div className="pt-2 border-t border-border-subtle space-y-2">
+              <p className="text-xs text-text-tertiary">Lịch backup tự động</p>
+              <label className="text-xs text-text-secondary flex items-center gap-2"><input type="checkbox" checked={autoBackupEnabled} onChange={(e) => setAutoBackupEnabled(e.target.checked)} />Bật backup tự động</label>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-text-tertiary">Chu kỳ (phút)</span>
+                <input type="number" min={10} value={autoBackupMinutes} onChange={(e) => setAutoBackupMinutes(Math.max(10, Number(e.target.value) || 60))} className="w-24 bg-bg-primary border border-border-subtle rounded-lg px-2 py-1 text-sm text-text-primary" />
+                <button onClick={saveAutoBackupSettings} className="px-3 py-1 rounded-lg bg-bg-primary border border-border-subtle text-text-secondary hover:text-text-primary">Lưu lịch</button>
+              </div>
+            </div>
           </div>
 
           <div className="bg-bg-tertiary border border-border-subtle rounded-xl p-3 space-y-2">
@@ -273,6 +297,10 @@ export function AppSettingsModal({ onClose }: AppSettingsModalProps) {
               <button onClick={handleRestore} disabled={isRestoring || !dryRunResult || !dryRunResult.checksum_valid || !dryRunResult.sqlite_valid} className="px-3 py-2 rounded-lg bg-accent-primary text-bg-primary disabled:opacity-50">
                 {isRestoring ? 'Đang restore...' : 'Restore ngay'}
               </button>
+            </div>
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2 space-y-1">
+              <p className="text-xs text-amber-300">Bước xác nhận an toàn: nhập <b>RESTORE</b> để cho phép khôi phục.</p>
+              <input value={restoreConfirmText} onChange={(e) => setRestoreConfirmText(e.target.value)} placeholder="Nhập RESTORE để xác nhận" className="w-full bg-bg-primary border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary" />
             </div>
             {dryRunResult && (
               <div className="text-xs text-text-secondary bg-bg-primary border border-border-subtle rounded-lg p-2 space-y-1">

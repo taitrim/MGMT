@@ -178,6 +178,9 @@ pub struct AccessUser {
     pub category_permissions: Vec<String>,
     pub can_view_password: bool,
     pub can_create_account: bool,
+    pub can_edit_account: bool,
+    pub can_delete_account: bool,
+    pub can_export_data: bool,
     pub created_at: DateTime<Utc>,
 }
 

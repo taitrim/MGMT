@@ -188,6 +188,9 @@ impl Database {
                 category_permissions TEXT,
                 can_view_password INTEGER DEFAULT 0,
                 can_create_account INTEGER DEFAULT 0,
+                can_edit_account INTEGER DEFAULT 0,
+                can_delete_account INTEGER DEFAULT 0,
+                can_export_data INTEGER DEFAULT 0,
                 password_hash TEXT,
                 password_salt TEXT,
                 key_encrypted TEXT,
@@ -322,6 +325,30 @@ impl Database {
         )?;
         if has_access_can_create_account == 0 {
             conn.execute("ALTER TABLE access_users ADD COLUMN can_create_account INTEGER DEFAULT 0", [])?;
+        }
+        let has_access_can_edit_account: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('access_users') WHERE name = 'can_edit_account'",
+            [],
+            |row| row.get(0),
+        )?;
+        if has_access_can_edit_account == 0 {
+            conn.execute("ALTER TABLE access_users ADD COLUMN can_edit_account INTEGER DEFAULT 0", [])?;
+        }
+        let has_access_can_delete_account: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('access_users') WHERE name = 'can_delete_account'",
+            [],
+            |row| row.get(0),
+        )?;
+        if has_access_can_delete_account == 0 {
+            conn.execute("ALTER TABLE access_users ADD COLUMN can_delete_account INTEGER DEFAULT 0", [])?;
+        }
+        let has_access_can_export_data: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('access_users') WHERE name = 'can_export_data'",
+            [],
+            |row| row.get(0),
+        )?;
+        if has_access_can_export_data == 0 {
+            conn.execute("ALTER TABLE access_users ADD COLUMN can_export_data INTEGER DEFAULT 0", [])?;
         }
 
         // Migrate legacy SQLite datetime strings (`YYYY-MM-DD HH:MM:SS`) to RFC3339
@@ -972,7 +999,7 @@ impl Database {
     pub fn delete_account_type(&self, id: &str) -> AppResult<()> {
         let conn = self.conn.lock().map_err(|e| AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string())))?;
         conn.execute(
-            "UPDATE account_types SET is_deleted = 1 WHERE id = ?1 AND is_builtin = 0",
+            "UPDATE account_types SET is_deleted = 1 WHERE id = ?1",
             params![id],
         )?;
         Ok(())
@@ -1075,7 +1102,7 @@ impl Database {
     pub fn get_access_users(&self, vault_id: &str) -> AppResult<Vec<AccessUser>> {
         let conn = self.conn.lock().map_err(|e| AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string())))?;
         let mut stmt = conn.prepare(
-            "SELECT id, vault_id, name, email, role, is_active, category_permissions, can_view_password, can_create_account, created_at FROM access_users WHERE vault_id = ?1 ORDER BY created_at ASC"
+            "SELECT id, vault_id, name, email, role, is_active, category_permissions, can_view_password, can_create_account, can_edit_account, can_delete_account, can_export_data, created_at FROM access_users WHERE vault_id = ?1 ORDER BY created_at ASC"
         )?;
         let users = stmt.query_map(params![vault_id], |row| {
             let permissions_raw: Option<String> = row.get(6)?;
@@ -1093,7 +1120,10 @@ impl Database {
                 category_permissions,
                 can_view_password: row.get::<_, i32>(7)? != 0,
                 can_create_account: row.get::<_, i32>(8)? != 0,
-                created_at: parse_datetime(&row.get::<_, String>(9)?),
+                can_edit_account: row.get::<_, i32>(9)? != 0,
+                can_delete_account: row.get::<_, i32>(10)? != 0,
+                can_export_data: row.get::<_, i32>(11)? != 0,
+                created_at: parse_datetime(&row.get::<_, String>(12)?),
             })
         })?.collect::<Result<Vec<_>, _>>()?;
         Ok(users)
@@ -1102,7 +1132,7 @@ impl Database {
     pub fn create_access_user(&self, user: &AccessUser, password_hash: String, password_salt: String, key_encrypted: String, key_nonce: String) -> AppResult<()> {
         let conn = self.conn.lock().map_err(|e| AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string())))?;
         conn.execute(
-            "INSERT INTO access_users (id, vault_id, name, email, role, is_active, category_permissions, can_view_password, can_create_account, password_hash, password_salt, key_encrypted, key_nonce, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+            "INSERT INTO access_users (id, vault_id, name, email, role, is_active, category_permissions, can_view_password, can_create_account, can_edit_account, can_delete_account, can_export_data, password_hash, password_salt, key_encrypted, key_nonce, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
             params![
                 user.id,
                 user.vault_id,
@@ -1113,6 +1143,9 @@ impl Database {
                 serde_json::to_string(&user.category_permissions)?,
                 user.can_view_password as i32,
                 user.can_create_account as i32,
+                user.can_edit_account as i32,
+                user.can_delete_account as i32,
+                user.can_export_data as i32,
                 password_hash,
                 password_salt,
                 key_encrypted,
@@ -1123,11 +1156,11 @@ impl Database {
         Ok(())
     }
 
-    pub fn update_access_user(&self, id: &str, name: String, email: Option<String>, role: String, is_active: bool, category_permissions: Vec<String>, can_view_password: bool, can_create_account: bool) -> AppResult<()> {
+    pub fn update_access_user(&self, id: &str, name: String, email: Option<String>, role: String, is_active: bool, category_permissions: Vec<String>, can_view_password: bool, can_create_account: bool, can_edit_account: bool, can_delete_account: bool, can_export_data: bool) -> AppResult<()> {
         let conn = self.conn.lock().map_err(|e| AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string())))?;
         conn.execute(
-            "UPDATE access_users SET name = ?1, email = ?2, role = ?3, is_active = ?4, category_permissions = ?5, can_view_password = ?6, can_create_account = ?7 WHERE id = ?8",
-            params![name, email, role, is_active as i32, serde_json::to_string(&category_permissions)?, can_view_password as i32, can_create_account as i32, id],
+            "UPDATE access_users SET name = ?1, email = ?2, role = ?3, is_active = ?4, category_permissions = ?5, can_view_password = ?6, can_create_account = ?7, can_edit_account = ?8, can_delete_account = ?9, can_export_data = ?10 WHERE id = ?11",
+            params![name, email, role, is_active as i32, serde_json::to_string(&category_permissions)?, can_view_password as i32, can_create_account as i32, can_edit_account as i32, can_delete_account as i32, can_export_data as i32, id],
         )?;
         Ok(())
     }
@@ -1141,7 +1174,7 @@ impl Database {
     pub fn get_access_user_auth_by_identifier(&self, vault_id: &str, identifier: &str) -> AppResult<Option<(AccessUser, String, String, String, String, i32, Option<DateTime<Utc>>)>> {
         let conn = self.conn.lock().map_err(|e| AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string())))?;
         let mut stmt = conn.prepare(
-            "SELECT id, vault_id, name, email, role, is_active, category_permissions, can_view_password, can_create_account, created_at, password_hash, password_salt, key_encrypted, key_nonce, failed_attempts, locked_until
+            "SELECT id, vault_id, name, email, role, is_active, category_permissions, can_view_password, can_create_account, can_edit_account, can_delete_account, can_export_data, created_at, password_hash, password_salt, key_encrypted, key_nonce, failed_attempts, locked_until
              FROM access_users
              WHERE vault_id = ?1 AND (LOWER(name) = LOWER(?2) OR LOWER(COALESCE(email, '')) = LOWER(?2))
              LIMIT 1"
@@ -1163,14 +1196,17 @@ impl Database {
                     category_permissions,
                     can_view_password: row.get::<_, i32>(7)? != 0,
                     can_create_account: row.get::<_, i32>(8)? != 0,
-                    created_at: parse_datetime(&row.get::<_, String>(9)?),
+                    can_edit_account: row.get::<_, i32>(9)? != 0,
+                    can_delete_account: row.get::<_, i32>(10)? != 0,
+                    can_export_data: row.get::<_, i32>(11)? != 0,
+                    created_at: parse_datetime(&row.get::<_, String>(12)?),
                 },
-                row.get(10)?,
-                row.get(11)?,
-                row.get(12)?,
                 row.get(13)?,
                 row.get(14)?,
-                parse_optional_datetime(row.get::<_, Option<String>>(15)?),
+                row.get(15)?,
+                row.get(16)?,
+                row.get(17)?,
+                parse_optional_datetime(row.get::<_, Option<String>>(18)?),
             ))
         }).optional()?;
         Ok(item)
@@ -1179,7 +1215,7 @@ impl Database {
     pub fn get_access_user_auth_by_id(&self, id: &str) -> AppResult<Option<(AccessUser, String)>> {
         let conn = self.conn.lock().map_err(|e| AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string())))?;
         let mut stmt = conn.prepare(
-            "SELECT id, vault_id, name, email, role, is_active, category_permissions, can_view_password, can_create_account, created_at, password_hash
+            "SELECT id, vault_id, name, email, role, is_active, category_permissions, can_view_password, can_create_account, can_edit_account, can_delete_account, can_export_data, created_at, password_hash
              FROM access_users WHERE id = ?1 LIMIT 1"
         )?;
         let item = stmt.query_row(params![id], |row| {
@@ -1199,9 +1235,12 @@ impl Database {
                     category_permissions,
                     can_view_password: row.get::<_, i32>(7)? != 0,
                     can_create_account: row.get::<_, i32>(8)? != 0,
-                    created_at: parse_datetime(&row.get::<_, String>(9)?),
+                    can_edit_account: row.get::<_, i32>(9)? != 0,
+                    can_delete_account: row.get::<_, i32>(10)? != 0,
+                    can_export_data: row.get::<_, i32>(11)? != 0,
+                    created_at: parse_datetime(&row.get::<_, String>(12)?),
                 },
-                row.get(10)?,
+                row.get(13)?,
             ))
         }).optional()?;
         Ok(item)

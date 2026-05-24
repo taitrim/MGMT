@@ -85,14 +85,14 @@ export function CustomerManagerModal({ onClose }: CustomerManagerModalProps) {
         exit={{ opacity: 0, scale: 0.96, y: 10 }}
         className="relative w-full max-w-5xl max-h-[92vh] overflow-hidden modal-panel border border-border-subtle rounded-2xl flex flex-col"
       >
-        <div className="flex items-center justify-between p-6 border-b border-border-subtle">
+        <div className="flex items-center justify-between p-6 border-b border-border-subtle bg-gradient-to-r from-sky-500/10 via-emerald-500/5 to-violet-500/10">
           <h2 className="text-xl font-semibold text-text-primary">{t(language, 'Customer Management', 'Quản lý khách hàng')}</h2>
           <button onClick={onClose} className="p-2 text-text-tertiary hover:text-text-primary hover:bg-bg-hover rounded-lg">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-6 border-b border-border-subtle space-y-3">
+        <div className="p-6 border-b border-border-subtle space-y-3 premium-section section-sky mx-4 mt-4 rounded-2xl">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t(language, 'Customer name', 'Tên khách hàng')} className="bg-bg-tertiary border border-border-subtle rounded-xl px-3 py-2 text-text-primary" />
             <input value={contact} onChange={(e) => setContact(e.target.value)} placeholder={t(language, 'Contact', 'Liên hệ')} className="bg-bg-tertiary border border-border-subtle rounded-xl px-3 py-2 text-text-primary" />
@@ -108,12 +108,12 @@ export function CustomerManagerModal({ onClose }: CustomerManagerModalProps) {
           </div>
         </div>
 
-        <div className="p-6 overflow-auto space-y-2">
+        <div className="p-6 overflow-auto grid grid-cols-1 md:grid-cols-2 gap-3">
           {customers.length === 0 ? (
             <p className="text-text-tertiary text-sm">{t(language, 'No customers yet', 'Chưa có khách hàng')}</p>
           ) : (
             customers.map((c) => (
-              <div key={c.id} className="flex items-center justify-between bg-bg-tertiary rounded-xl p-3 border border-border-subtle">
+              <div key={c.id} className="flex items-center justify-between bg-bg-tertiary rounded-xl p-3 border border-border-subtle h-fit">
                 {editingId === c.id ? (
                   <div className="w-full space-y-2">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-2">

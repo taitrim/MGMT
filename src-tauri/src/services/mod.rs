@@ -68,12 +68,51 @@ impl VaultService {
         Ok(())
     }
 
-    fn ensure_can_modify_account(&self) -> AppResult<()> {
+    fn ensure_can_edit_account(&self) -> AppResult<()> {
         self.check_session()?;
         if let Some(u) = self.current_access_user.read().clone() {
-            if u.role == "viewer" {
-                return Err(AppError::InvalidOperation("Permission denied: viewer is read-only".to_string()));
+            if u.role == "owner" || u.role == "admin" || u.can_edit_account {
+                return Ok(());
             }
+            return Err(AppError::InvalidOperation("Permission denied: cannot edit account".to_string()));
+        }
+        Ok(())
+    }
+
+    fn ensure_can_delete_account(&self) -> AppResult<()> {
+        self.check_session()?;
+        if let Some(u) = self.current_access_user.read().clone() {
+            if u.role == "owner" || u.role == "admin" || u.can_delete_account {
+                return Ok(());
+            }
+            return Err(AppError::InvalidOperation("Permission denied: cannot delete account".to_string()));
+        }
+        Ok(())
+    }
+
+    fn ensure_can_export_data(&self) -> AppResult<()> {
+        self.check_session()?;
+        if let Some(u) = self.current_access_user.read().clone() {
+            if u.role == "owner" || u.role == "admin" || u.can_export_data {
+                return Ok(());
+            }
+            return Err(AppError::InvalidOperation("Permission denied: cannot export data".to_string()));
+        }
+        Ok(())
+    }
+
+    fn validate_password_policy(&self, password: &str) -> AppResult<()> {
+        if password.len() < 10 {
+            return Err(AppError::InvalidOperation("Password must be at least 10 characters".to_string()));
+        }
+        let has_lower = password.chars().any(|c| c.is_ascii_lowercase());
+        let has_upper = password.chars().any(|c| c.is_ascii_uppercase());
+        let has_digit = password.chars().any(|c| c.is_ascii_digit());
+        let has_symbol = password.chars().any(|c| !c.is_ascii_alphanumeric());
+        if !(has_lower && has_upper && has_digit && has_symbol) {
+            return Err(AppError::InvalidOperation(
+                "Password must include uppercase, lowercase, number, and special character".to_string(),
+            ));
         }
         Ok(())
     }
@@ -113,9 +152,7 @@ impl VaultService {
 
     pub fn change_master_password(&self, current_password: &str, new_password: &str) -> AppResult<()> {
         self.ensure_owner_or_admin()?;
-        if new_password.len() < 10 {
-            return Err(AppError::InvalidOperation("New password must be at least 10 characters".to_string()));
-        }
+        self.validate_password_policy(new_password)?;
         let user_id = self.get_current_user_id()?;
         let vault_id = self.get_current_vault_id()?;
         let user = self.db.get_user(&user_id)?
@@ -369,6 +406,7 @@ impl VaultService {
     }
 
     pub fn setup(&self, display_name: &str, master_password: &str, admin_username: Option<String>, admin_password: Option<String>) -> AppResult<()> {
+        self.validate_password_policy(master_password)?;
         let salt = CryptoService::generate_salt();
         let (hash, _) = self.crypto.read().hash_password(master_password)?;
 
@@ -393,6 +431,9 @@ impl VaultService {
             category_permissions: vec!["all".to_string()],
             can_view_password: true,
             can_create_account: true,
+            can_edit_account: true,
+            can_delete_account: true,
+            can_export_data: true,
             created_at: Utc::now(),
         };
         let (owner_hash, _) = self.crypto.read().hash_password(master_password)?;
@@ -406,7 +447,7 @@ impl VaultService {
         // Optional: create a dedicated admin account at setup time.
         if let (Some(admin_name_raw), Some(admin_pass)) = (admin_username, admin_password) {
             let admin_name = admin_name_raw.trim().to_string();
-            if !admin_name.is_empty() && admin_pass.len() >= 10 {
+            if !admin_name.is_empty() && self.validate_password_policy(&admin_pass).is_ok() {
                 let admin = AccessUser {
                     id: Uuid::new_v4().to_string(),
                     vault_id: vault.id.clone(),
@@ -417,6 +458,9 @@ impl VaultService {
                     category_permissions: vec!["all".to_string()],
                     can_view_password: true,
                     can_create_account: true,
+                    can_edit_account: true,
+                    can_delete_account: true,
+                    can_export_data: true,
                     created_at: Utc::now(),
                 };
                 let (admin_hash, _) = self.crypto.read().hash_password(&admin_pass)?;
@@ -594,7 +638,7 @@ impl VaultService {
     }
 
     pub fn export_vault(&self, dest_path: std::path::PathBuf) -> AppResult<()> {
-        self.check_session()?;
+        self.ensure_can_export_data()?;
         let src_path = self.db.get_path();
         let data = std::fs::read(&src_path)?;
         let checksum = CryptoService::compute_hash(&BASE64.encode(&data));
@@ -841,7 +885,7 @@ impl VaultService {
         expires_at: Option<String>,
         fields: Option<Vec<FieldValue>>,
     ) -> AppResult<()> {
-        self.ensure_can_modify_account()?;
+        self.ensure_can_edit_account()?;
         let user_id = self.get_current_user_id()?;
 
         if let Some(mut account) = self.db.get_account(id)? {
@@ -922,7 +966,7 @@ impl VaultService {
     }
 
     pub fn delete_account(&self, id: &str) -> AppResult<()> {
-        self.ensure_can_modify_account()?;
+        self.ensure_can_delete_account()?;
         let user_id = self.get_current_user_id()?;
 
         self.db.delete_account(id)?;
@@ -1028,11 +1072,8 @@ impl VaultService {
 
     pub fn delete_account_type(&self, id: &str) -> AppResult<()> {
         self.ensure_owner_or_admin()?;
-        let account_type = self.db.get_account_type(id)?
+        let _account_type = self.db.get_account_type(id)?
             .ok_or(AppError::InvalidOperation("Account type not found".to_string()))?;
-        if account_type.is_builtin {
-            return Err(AppError::InvalidOperation("Cannot delete builtin account type".to_string()));
-        }
         self.db.delete_account_type(id)
     }
 
@@ -1280,11 +1321,9 @@ impl VaultService {
         self.db.get_access_users(&vault_id)
     }
 
-    pub fn create_access_user(&self, name: String, email: Option<String>, role: String, password: String, category_permissions: Vec<String>, can_view_password: bool, can_create_account: bool) -> AppResult<AccessUser> {
+    pub fn create_access_user(&self, name: String, email: Option<String>, role: String, password: String, category_permissions: Vec<String>, can_view_password: bool, can_create_account: bool, can_edit_account: bool, can_delete_account: bool, can_export_data: bool) -> AppResult<AccessUser> {
         self.ensure_owner_or_admin()?;
-        if password.len() < 10 {
-            return Err(AppError::InvalidOperation("Password must be at least 10 characters".to_string()));
-        }
+        self.validate_password_policy(&password)?;
         let vault_id = self.get_current_vault_id()?;
         let normalized_role = role.to_lowercase();
         let allowed = ["owner", "admin", "editor", "viewer"];
@@ -1293,6 +1332,9 @@ impl VaultService {
         }
         let effective_can_view_password = if normalized_role == "viewer" { false } else { can_view_password };
         let effective_can_create_account = if normalized_role == "viewer" { false } else { can_create_account };
+        let effective_can_edit_account = if normalized_role == "viewer" { false } else { can_edit_account };
+        let effective_can_delete_account = if normalized_role == "viewer" { false } else { can_delete_account };
+        let effective_can_export_data = if normalized_role == "viewer" { false } else { can_export_data };
         let user = AccessUser {
             id: Uuid::new_v4().to_string(),
             vault_id,
@@ -1303,6 +1345,9 @@ impl VaultService {
             category_permissions,
             can_view_password: effective_can_view_password,
             can_create_account: effective_can_create_account,
+            can_edit_account: effective_can_edit_account,
+            can_delete_account: effective_can_delete_account,
+            can_export_data: effective_can_export_data,
             created_at: Utc::now(),
         };
         let (hash, _) = self.crypto.read().hash_password(&password)?;
@@ -1315,7 +1360,7 @@ impl VaultService {
         Ok(user)
     }
 
-    pub fn update_access_user(&self, id: &str, name: String, email: Option<String>, role: String, is_active: bool, category_permissions: Vec<String>, can_view_password: bool, can_create_account: bool) -> AppResult<()> {
+    pub fn update_access_user(&self, id: &str, name: String, email: Option<String>, role: String, is_active: bool, category_permissions: Vec<String>, can_view_password: bool, can_create_account: bool, can_edit_account: bool, can_delete_account: bool, can_export_data: bool) -> AppResult<()> {
         self.ensure_owner_or_admin()?;
         let normalized_role = role.to_lowercase();
         let allowed = ["owner", "admin", "editor", "viewer"];
@@ -1324,7 +1369,10 @@ impl VaultService {
         }
         let effective_can_view_password = if normalized_role == "viewer" { false } else { can_view_password };
         let effective_can_create_account = if normalized_role == "viewer" { false } else { can_create_account };
-        self.db.update_access_user(id, name, email, normalized_role, is_active, category_permissions, effective_can_view_password, effective_can_create_account)
+        let effective_can_edit_account = if normalized_role == "viewer" { false } else { can_edit_account };
+        let effective_can_delete_account = if normalized_role == "viewer" { false } else { can_delete_account };
+        let effective_can_export_data = if normalized_role == "viewer" { false } else { can_export_data };
+        self.db.update_access_user(id, name, email, normalized_role, is_active, category_permissions, effective_can_view_password, effective_can_create_account, effective_can_edit_account, effective_can_delete_account, effective_can_export_data)
     }
 
     pub fn delete_access_user(&self, id: &str) -> AppResult<()> {
@@ -1334,9 +1382,7 @@ impl VaultService {
 
     pub fn change_access_user_password(&self, id: &str, new_password: String) -> AppResult<()> {
         self.ensure_owner_or_admin()?;
-        if new_password.len() < 10 {
-            return Err(AppError::InvalidOperation("Password must be at least 10 characters".to_string()));
-        }
+        self.validate_password_policy(&new_password)?;
         let (hash, _) = self.crypto.read().hash_password(&new_password)?;
         let salt = CryptoService::generate_salt();
         let salt_bytes = BASE64.decode(&salt).map_err(|e| AppError::Crypto(e.to_string()))?;
@@ -1425,7 +1471,7 @@ impl VaultService {
     }
 
     pub fn create_customer(&self, name: String, contact: Option<String>, notes: Option<String>) -> AppResult<Customer> {
-        self.ensure_can_modify_account()?;
+        self.ensure_can_edit_account()?;
         let vault_id = self.get_current_vault_id()?;
         let customer = Customer {
             id: Uuid::new_v4().to_string(),
@@ -1453,7 +1499,7 @@ impl VaultService {
     }
 
     pub fn update_customer(&self, id: &str, name: String, contact: Option<String>, notes: Option<String>) -> AppResult<()> {
-        self.ensure_can_modify_account()?;
+        self.ensure_can_edit_account()?;
         let trimmed_name = name.trim().to_string();
         if trimmed_name.is_empty() {
             return Err(AppError::InvalidOperation("Customer name is required".to_string()));

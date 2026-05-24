@@ -20,11 +20,20 @@ export function AccessUserManagerModal({ onClose }: AccessUserManagerModalProps)
   const [newPassword, setNewPassword] = useState('')
   const [newCanViewPassword, setNewCanViewPassword] = useState(false)
   const [newCanCreateAccount, setNewCanCreateAccount] = useState(false)
+  const [newCanEditAccount, setNewCanEditAccount] = useState(false)
+  const [newCanDeleteAccount, setNewCanDeleteAccount] = useState(false)
+  const [newCanExportData, setNewCanExportData] = useState(false)
   const [newCategoryPermissions, setNewCategoryPermissions] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [resetTarget, setResetTarget] = useState<AccessUser | null>(null)
   const [resetPassword, setResetPassword] = useState('')
   const [resetConfirm, setResetConfirm] = useState('')
+  const roleStats = {
+    owner: accessUsers.filter((u) => u.role === 'owner').length,
+    admin: accessUsers.filter((u) => u.role === 'admin').length,
+    editor: accessUsers.filter((u) => u.role === 'editor').length,
+    viewer: accessUsers.filter((u) => u.role === 'viewer').length,
+  }
 
   useEffect(() => {
     fetchAccessUsers()
@@ -40,7 +49,10 @@ export function AccessUserManagerModal({ onClose }: AccessUserManagerModalProps)
         newPassword,
         newCategoryPermissions,
         newCanViewPassword,
-        newCanCreateAccount
+        newCanCreateAccount,
+        newCanEditAccount,
+        newCanDeleteAccount,
+        newCanExportData
       )
       setNewName('')
       setNewEmail('')
@@ -48,6 +60,9 @@ export function AccessUserManagerModal({ onClose }: AccessUserManagerModalProps)
       setNewPassword('')
       setNewCanViewPassword(false)
       setNewCanCreateAccount(false)
+      setNewCanEditAccount(false)
+      setNewCanDeleteAccount(false)
+      setNewCanExportData(false)
       setNewCategoryPermissions([])
     } catch (e) {
       setError(String(e))
@@ -82,13 +97,20 @@ export function AccessUserManagerModal({ onClose }: AccessUserManagerModalProps)
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }} className="w-full max-w-6xl max-h-[94vh] modal-panel border border-border-subtle rounded-2xl overflow-hidden">
-        <div className="flex items-center justify-between p-5 border-b border-border-subtle">
+        <div className="flex items-center justify-between p-5 border-b border-border-subtle bg-gradient-to-r from-violet-500/10 via-sky-500/5 to-emerald-500/10">
           <h2 className="text-lg font-semibold text-text-primary">Phân quyền user</h2>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-bg-hover text-text-secondary"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="p-5 space-y-4">
-          <div className="soft-chip p-3 space-y-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <div className="soft-chip p-2"><p className="text-[11px] text-text-tertiary">Owner</p><p className="text-lg font-semibold text-text-primary">{roleStats.owner}</p></div>
+            <div className="soft-chip p-2"><p className="text-[11px] text-text-tertiary">Admin</p><p className="text-lg font-semibold text-text-primary">{roleStats.admin}</p></div>
+            <div className="soft-chip p-2"><p className="text-[11px] text-text-tertiary">Editor</p><p className="text-lg font-semibold text-text-primary">{roleStats.editor}</p></div>
+            <div className="soft-chip p-2"><p className="text-[11px] text-text-tertiary">Viewer</p><p className="text-lg font-semibold text-text-primary">{roleStats.viewer}</p></div>
+          </div>
+          <div className="premium-section section-violet p-4 space-y-3">
+            <p className="text-xs uppercase tracking-wide text-text-tertiary">Tạo user mới</p>
             <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
               <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Tên user" className="bg-bg-primary border border-border-subtle rounded-xl px-3 py-2 text-text-primary" />
               <input value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="Email (tùy chọn)" className="bg-bg-primary border border-border-subtle rounded-xl px-3 py-2 text-text-primary" />
@@ -101,8 +123,13 @@ export function AccessUserManagerModal({ onClose }: AccessUserManagerModalProps)
               />
               <button onClick={onCreate} className="bg-accent-primary text-bg-primary rounded-xl px-3 py-2 flex items-center justify-center gap-2"><Plus className="w-4 h-4" />Thêm user</button>
             </div>
-            <label className="text-xs text-text-secondary flex items-center gap-2"><input type="checkbox" checked={newCanViewPassword} onChange={(e) => setNewCanViewPassword(e.target.checked)} />Cho phép xem password</label>
-            <label className="text-xs text-text-secondary flex items-center gap-2"><input type="checkbox" checked={newCanCreateAccount} onChange={(e) => setNewCanCreateAccount(e.target.checked)} />Cho phép thêm tài khoản</label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <label className="text-xs text-text-secondary flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-tertiary border border-border-subtle"><input type="checkbox" checked={newCanViewPassword} onChange={(e) => setNewCanViewPassword(e.target.checked)} />Cho phép xem password</label>
+              <label className="text-xs text-text-secondary flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-tertiary border border-border-subtle"><input type="checkbox" checked={newCanCreateAccount} onChange={(e) => setNewCanCreateAccount(e.target.checked)} />Cho phép thêm tài khoản</label>
+              <label className="text-xs text-text-secondary flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-tertiary border border-border-subtle"><input type="checkbox" checked={newCanEditAccount} onChange={(e) => setNewCanEditAccount(e.target.checked)} />Cho phép sửa tài khoản</label>
+              <label className="text-xs text-text-secondary flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-tertiary border border-border-subtle"><input type="checkbox" checked={newCanDeleteAccount} onChange={(e) => setNewCanDeleteAccount(e.target.checked)} />Cho phép xóa tài khoản</label>
+              <label className="text-xs text-text-secondary flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-tertiary border border-border-subtle md:col-span-2"><input type="checkbox" checked={newCanExportData} onChange={(e) => setNewCanExportData(e.target.checked)} />Cho phép export dữ liệu</label>
+            </div>
             <div>
               <p className="text-xs text-text-secondary mb-2">Quyền xem theo hạng mục</p>
               <div className="flex flex-wrap gap-2">
@@ -161,7 +188,7 @@ function UserRow({ user, onSave, onDelete, onOpenReset }: { user: AccessUser; on
 
   return (
     <div className="soft-chip p-3 space-y-2">
-      <div className="grid grid-cols-1 md:grid-cols-8 gap-2 items-center">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center">
         <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} className="bg-bg-primary border border-border-subtle rounded-lg px-2 py-1 text-sm text-text-primary" />
         <input value={draft.email || ''} onChange={(e) => setDraft({ ...draft, email: e.target.value || null })} className="bg-bg-primary border border-border-subtle rounded-lg px-2 py-1 text-sm text-text-primary" />
         <SearchableSelect
@@ -174,6 +201,9 @@ function UserRow({ user, onSave, onDelete, onOpenReset }: { user: AccessUser; on
         <label className="text-xs text-text-secondary flex items-center gap-2"><input type="checkbox" checked={draft.is_active} onChange={(e) => setDraft({ ...draft, is_active: e.target.checked })} />Active</label>
         <label className="text-xs text-text-secondary flex items-center gap-2"><input type="checkbox" checked={draft.can_view_password} onChange={(e) => setDraft({ ...draft, can_view_password: e.target.checked })} />Xem password</label>
         <label className="text-xs text-text-secondary flex items-center gap-2"><input type="checkbox" checked={draft.can_create_account} onChange={(e) => setDraft({ ...draft, can_create_account: e.target.checked })} />Thêm tài khoản</label>
+        <label className="text-xs text-text-secondary flex items-center gap-2"><input type="checkbox" checked={draft.can_edit_account} onChange={(e) => setDraft({ ...draft, can_edit_account: e.target.checked })} />Sửa</label>
+        <label className="text-xs text-text-secondary flex items-center gap-2"><input type="checkbox" checked={draft.can_delete_account} onChange={(e) => setDraft({ ...draft, can_delete_account: e.target.checked })} />Xóa</label>
+        <label className="text-xs text-text-secondary flex items-center gap-2"><input type="checkbox" checked={draft.can_export_data} onChange={(e) => setDraft({ ...draft, can_export_data: e.target.checked })} />Export</label>
         <div className="text-xs text-text-tertiary">{new Date(draft.created_at).toLocaleDateString()}</div>
         <button onClick={() => onSave(draft)} className="p-2 rounded-lg text-text-secondary hover:bg-bg-hover justify-self-end" title="Lưu"><Save className="w-4 h-4" /></button>
         <div className="flex gap-1 justify-self-end">

@@ -1,5 +1,6 @@
-Ôªøimport { Customer, Account, useVaultStore } from '../../stores/vaultStore'
-import { Building2, Mail, StickyNote, Users } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Customer, Account, useVaultStore } from '../../stores/vaultStore'
+import { Building2, Mail, Plus, StickyNote, Users } from 'lucide-react'
 import { t, useI18nStore } from '../../stores/i18nStore'
 import { AccountList } from './AccountList'
 
@@ -9,6 +10,7 @@ interface CustomerDetailPanelProps {
   onSelectCustomer: (id: string) => void
   accounts: Account[]
   onSelectAccount: (account: Account) => void
+  onOpenManageCustomers: () => void
 }
 
 export function CustomerDetailPanel({
@@ -17,9 +19,11 @@ export function CustomerDetailPanel({
   onSelectCustomer,
   accounts,
   onSelectAccount,
+  onOpenManageCustomers,
 }: CustomerDetailPanelProps) {
   const { language } = useI18nStore()
   const { accountTypes } = useVaultStore()
+  const [customerQuery, setCustomerQuery] = useState('')
   const selectedCustomer = customers.find((c) => c.id === selectedCustomerId) || null
   const typeNameMap = new Map(accountTypes.map((t) => [t.id, t.name]))
   const typeColorMap = new Map(accountTypes.map((t) => [t.id, t.color || '#22c55e']))
@@ -30,17 +34,42 @@ export function CustomerDetailPanel({
     return acc
   }, {})
 
+  const filteredCustomers = useMemo(() => {
+    const q = customerQuery.trim().toLowerCase()
+    if (!q) return customers
+    return customers.filter((c) =>
+      c.name.toLowerCase().includes(q) ||
+      (c.contact || '').toLowerCase().includes(q) ||
+      (c.notes || '').toLowerCase().includes(q)
+    )
+  }, [customers, customerQuery])
+
   return (
     <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 h-full">
       <section className="xl:col-span-1 bg-bg-secondary border border-border-subtle rounded-2xl overflow-hidden flex flex-col">
         <div className="px-4 py-3 border-b border-border-subtle">
-          <h3 className="text-sm font-semibold text-text-primary">{t(language, 'Customers', 'Kh√°ch h√†ng')}</h3>
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-text-primary">{t(language, 'Customers', 'Kh·ch h‡ng')}</h3>
+            <button
+              onClick={onOpenManageCustomers}
+              className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-lg bg-accent-primary/15 text-accent-primary hover:bg-accent-primary/25"
+            >
+              <Plus className="w-3 h-3" />
+              {t(language, 'Add customer', 'ThÍm kh·ch h‡ng')}
+            </button>
+          </div>
         </div>
         <div className="p-3 space-y-2 overflow-auto">
+          <input
+            value={customerQuery}
+            onChange={(e) => setCustomerQuery(e.target.value)}
+            placeholder={t(language, 'Search customer...', 'TÏm kh·ch h‡ng...')}
+            className="w-full bg-bg-tertiary border border-border-subtle rounded-xl px-3 py-2 text-sm text-text-primary"
+          />
           {customers.length === 0 ? (
-            <p className="text-sm text-text-tertiary">{t(language, 'No customers yet', 'Ch∆∞a c√≥ kh√°ch h√†ng')}</p>
+            <p className="text-sm text-text-tertiary">{t(language, 'No customers yet', 'Chua cÛ kh·ch h‡ng')}</p>
           ) : (
-            customers.map((customer) => (
+            filteredCustomers.map((customer) => (
               <button
                 key={customer.id}
                 onClick={() => onSelectCustomer(customer.id)}
@@ -61,7 +90,7 @@ export function CustomerDetailPanel({
       <section className="xl:col-span-2 bg-bg-secondary border border-border-subtle rounded-2xl overflow-hidden flex flex-col">
         {!selectedCustomer ? (
           <div className="h-full flex items-center justify-center text-text-tertiary text-sm">
-            {t(language, 'Select a customer to view accounts', 'Ch·ªçn kh√°ch h√†ng ƒë·ªÉ xem t√†i kho·∫£n')}
+            {t(language, 'Select a customer to view accounts', 'Ch?n kh·ch h‡ng d? xem t‡i kho?n')}
           </div>
         ) : (
           <>
@@ -74,28 +103,28 @@ export function CustomerDetailPanel({
                 <div className="bg-bg-tertiary border border-border-subtle rounded-xl p-3">
                   <p className="text-xs text-text-tertiary flex items-center gap-1">
                     <Users className="w-3 h-3" />
-                    {t(language, 'Accounts', 'T√†i kho·∫£n')}
+                    {t(language, 'Accounts', 'T‡i kho?n')}
                   </p>
                   <p className="text-xl font-semibold text-text-primary">{accounts.length}</p>
                 </div>
                 <div className="bg-bg-tertiary border border-border-subtle rounded-xl p-3">
                   <p className="text-xs text-text-tertiary flex items-center gap-1">
                     <Mail className="w-3 h-3" />
-                    {t(language, 'Contact', 'Li√™n h·ªá')}
+                    {t(language, 'Contact', 'LiÍn h?')}
                   </p>
                   <p className="text-sm text-text-primary truncate">{selectedCustomer.contact || '-'}</p>
                 </div>
                 <div className="bg-bg-tertiary border border-border-subtle rounded-xl p-3">
                   <p className="text-xs text-text-tertiary flex items-center gap-1">
                     <StickyNote className="w-3 h-3" />
-                    {t(language, 'Notes', 'Ghi ch√∫')}
+                    {t(language, 'Notes', 'Ghi ch˙')}
                   </p>
                   <p className="text-sm text-text-primary truncate">{selectedCustomer.notes || '-'}</p>
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
                 {Object.keys(typeStats).length === 0 ? (
-                  <span className="text-xs text-text-tertiary">{t(language, 'No account data', 'Kh√¥ng c√≥ d·ªØ li·ªáu t√†i kho·∫£n')}</span>
+                  <span className="text-xs text-text-tertiary">{t(language, 'No account data', 'KhÙng cÛ d? li?u t‡i kho?n')}</span>
                 ) : (
                   Object.entries(typeStats).map(([typeId, count]) => (
                     <span

@@ -77,7 +77,8 @@ export function AccountList({ accounts, viewMode, onSelectAccount, selectedIds, 
 
           return (
             <motion.button key={account.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} onClick={() => onSelectAccount(account)}
-              className="group surface-card hover:border-border-default p-4 text-left transition-all hover:-translate-y-0.5">
+              className="group surface-card hover:border-border-default p-4 text-left transition-all hover:-translate-y-0.5"
+              style={{ borderTop: `2px solid ${color}` }}>
               <div className="flex items-start justify-between mb-3">
                 <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ color, backgroundColor: `${color}22` }}><Icon className="w-5 h-5" /></div>
                 {account.favorite && <Star className="w-4 h-4 text-accent-primary fill-accent-primary" />}
@@ -110,7 +111,8 @@ export function AccountList({ accounts, viewMode, onSelectAccount, selectedIds, 
 
         return (
           <motion.button key={account.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.03 }} onClick={() => onSelectAccount(account)}
-            className="w-full group surface-card hover:border-border-default p-4 text-left transition-all hover:-translate-y-0.5">
+            className="w-full group surface-card hover:border-border-default p-4 text-left transition-all hover:-translate-y-0.5"
+            style={{ borderLeft: `3px solid ${color}` }}>
             <div className="flex items-start justify-between gap-2 mb-3">
               <div className="flex items-center gap-3 min-w-0">
                 {onToggleSelected && (

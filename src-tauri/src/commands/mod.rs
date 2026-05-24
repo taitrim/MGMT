@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use directories::ProjectDirs;
 use std::process::Command;
 use std::path::PathBuf;
+use std::net::{TcpStream, ToSocketAddrs};
+use std::time::Duration;
 
 use crate::models::*;
 use crate::services::{DbHealthResult, ImportDryRunResult, VaultService};
@@ -18,6 +20,13 @@ pub struct AppStorageInfo {
 pub struct DatabasePathItem {
     pub name: String,
     pub path: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ConnectionTestResult {
+    pub reachable: bool,
+    pub message: String,
+    pub latency_ms: Option<u128>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -86,6 +95,9 @@ pub struct CreateAccessUserRequest {
     pub category_permissions: Option<Vec<String>>,
     pub can_view_password: Option<bool>,
     pub can_create_account: Option<bool>,
+    pub can_edit_account: Option<bool>,
+    pub can_delete_account: Option<bool>,
+    pub can_export_data: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -98,6 +110,9 @@ pub struct UpdateAccessUserRequest {
     pub category_permissions: Option<Vec<String>>,
     pub can_view_password: Option<bool>,
     pub can_create_account: Option<bool>,
+    pub can_edit_account: Option<bool>,
+    pub can_delete_account: Option<bool>,
+    pub can_export_data: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -405,6 +420,9 @@ pub async fn create_access_user(vault: State<'_, VaultService>, request: CreateA
         request.category_permissions.unwrap_or_default(),
         request.can_view_password.unwrap_or(false),
         request.can_create_account.unwrap_or(false),
+        request.can_edit_account.unwrap_or(false),
+        request.can_delete_account.unwrap_or(false),
+        request.can_export_data.unwrap_or(false),
     )
 }
 
@@ -419,6 +437,9 @@ pub async fn update_access_user(vault: State<'_, VaultService>, request: UpdateA
         request.category_permissions.unwrap_or_default(),
         request.can_view_password.unwrap_or(false),
         request.can_create_account.unwrap_or(false),
+        request.can_edit_account.unwrap_or(false),
+        request.can_delete_account.unwrap_or(false),
+        request.can_export_data.unwrap_or(false),
     )
 }
 
@@ -537,4 +558,185 @@ pub async fn open_app_data_directory(vault: State<'_, VaultService>) -> Result<(
         .arg(target_dir)
         .spawn()?;
     Ok(())
+}
+
+#[tauri::command]
+pub async fn open_connection_target(protocol: String, target: String) -> Result<(), AppError> {
+    let proto = protocol.trim().to_lowercase();
+    let value = target.trim();
+    if value.is_empty() {
+        return Err(AppError::InvalidOperation("Connection target is empty".to_string()));
+    }
+
+    match proto.as_str() {
+        "rdp" => {
+            Command::new("mstsc")
+                .arg(format!("/v:{}", value))
+                .spawn()?;
+        }
+        _ => {
+            // Let OS route protocol handlers: ssh://, sftp://, ftp://, vnc://, http(s)://...
+            Command::new("explorer")
+                .arg(value)
+                .spawn()?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn open_connection_with_app(
+    protocol: String,
+    host: String,
+    port: Option<u16>,
+    username: Option<String>,
+    target: Option<String>,
+    app: String,
+    custom_exe: Option<String>,
+    custom_args: Option<Vec<String>>,
+) -> Result<(), AppError> {
+    let proto = protocol.trim().to_lowercase();
+    let app = app.trim().to_lowercase();
+    let host = host.trim().to_string();
+    let target = target.unwrap_or_default().trim().to_string();
+    let username = username.unwrap_or_default().trim().to_string();
+
+    if host.is_empty() && target.is_empty() {
+        return Err(AppError::InvalidOperation("Missing connection information".to_string()));
+    }
+
+    if app == "system" {
+        let open_target = if !target.is_empty() {
+            target
+        } else {
+            match proto.as_str() {
+                "rdp" => format!("{}:{}", host, port.unwrap_or(3389)),
+                "ssh" => {
+                    let auth = if username.is_empty() { "".to_string() } else { format!("{}@", username) };
+                    let p = port.map(|x| format!(":{}", x)).unwrap_or_default();
+                    format!("ssh://{}{}{}", auth, host, p)
+                }
+                "sftp" | "ftp" => {
+                    let auth = if username.is_empty() { "".to_string() } else { format!("{}@", username) };
+                    let p = port.map(|x| format!(":{}", x)).unwrap_or_default();
+                    format!("sftp://{}{}{}", auth, host, p)
+                }
+                _ => host.clone(),
+            }
+        };
+        return open_connection_target(proto, open_target).await;
+    }
+
+    match app.as_str() {
+        "browser" => {
+            Command::new("explorer").arg(&target).spawn()?;
+        }
+        "chrome" => {
+            Command::new("chrome").arg(&target).spawn()?;
+        }
+        "edge" => {
+            Command::new("msedge").arg(&target).spawn()?;
+        }
+        "firefox" => {
+            Command::new("firefox").arg(&target).spawn()?;
+        }
+        "rdp" => {
+            Command::new("mstsc")
+                .arg(format!("/v:{}:{}", host, port.unwrap_or(3389)))
+                .spawn()?;
+        }
+        "putty" => {
+            let mut cmd = Command::new("putty");
+            cmd.arg("-ssh").arg(&host).arg("-P").arg(port.unwrap_or(22).to_string());
+            if !username.is_empty() {
+                cmd.arg("-l").arg(username);
+            }
+            cmd.spawn()?;
+        }
+        "winscp" => {
+            let scheme = if proto == "ftp" { "ftp" } else { "sftp" };
+            let auth = if username.is_empty() { "".to_string() } else { format!("{}@", username) };
+            let p = port.map(|v| format!(":{}", v)).unwrap_or_default();
+            let url = format!("{}://{}{}{}", scheme, auth, host, p);
+            Command::new("winscp").arg(url).spawn()?;
+        }
+        "custom" => {
+            let exe = custom_exe
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+            if exe.is_empty() {
+                return Err(AppError::InvalidOperation("Custom app path is required".to_string()));
+            }
+            let mut cmd = Command::new(exe);
+            let args = custom_args.unwrap_or_default();
+            for arg in args {
+                let value = arg
+                    .replace("{target}", &target)
+                    .replace("{host}", &host)
+                    .replace("{port}", &port.unwrap_or_default().to_string())
+                    .replace("{username}", &username);
+                if !value.trim().is_empty() {
+                    cmd.arg(value);
+                }
+            }
+            cmd.spawn()?;
+        }
+        _ => return Err(AppError::InvalidOperation("Unsupported app selection".to_string())),
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn test_connection_target(
+    host: String,
+    port: u16,
+    timeout_ms: Option<u64>,
+) -> Result<ConnectionTestResult, AppError> {
+    let host = host.trim();
+    if host.is_empty() {
+        return Ok(ConnectionTestResult {
+            reachable: false,
+            message: "Host is empty".to_string(),
+            latency_ms: None,
+        });
+    }
+
+    let timeout = Duration::from_millis(timeout_ms.unwrap_or(3000).clamp(500, 15000));
+    let start = std::time::Instant::now();
+
+    let mut addrs = match (host, port).to_socket_addrs() {
+        Ok(v) => v,
+        Err(e) => {
+            return Ok(ConnectionTestResult {
+                reachable: false,
+                message: format!("Resolve failed: {}", e),
+                latency_ms: None,
+            })
+        }
+    };
+
+    let addr = if let Some(a) = addrs.next() {
+        a
+    } else {
+        return Ok(ConnectionTestResult {
+            reachable: false,
+            message: "No address resolved".to_string(),
+            latency_ms: None,
+        });
+    };
+
+    match TcpStream::connect_timeout(&addr, timeout) {
+        Ok(_) => Ok(ConnectionTestResult {
+            reachable: true,
+            message: "Reachable".to_string(),
+            latency_ms: Some(start.elapsed().as_millis()),
+        }),
+        Err(e) => Ok(ConnectionTestResult {
+            reachable: false,
+            message: format!("Unreachable: {}", e),
+            latency_ms: None,
+        }),
+    }
 }

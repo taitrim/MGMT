@@ -85,6 +85,9 @@ export interface AccessUser {
   category_permissions: string[]
   can_view_password: boolean
   can_create_account: boolean
+  can_edit_account: boolean
+  can_delete_account: boolean
+  can_export_data: boolean
   created_at: string
 }
 
@@ -113,7 +116,10 @@ interface VaultState {
     password: string,
     categoryPermissions?: string[],
     canViewPassword?: boolean,
-    canCreateAccount?: boolean
+    canCreateAccount?: boolean,
+    canEditAccount?: boolean,
+    canDeleteAccount?: boolean,
+    canExportData?: boolean
   ) => Promise<void>
   updateAccessUser: (user: AccessUser) => Promise<void>
   deleteAccessUser: (id: string) => Promise<void>
@@ -238,7 +244,10 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     password: string,
     categoryPermissions: string[] = [],
     canViewPassword = false,
-    canCreateAccount = false
+    canCreateAccount = false,
+    canEditAccount = false,
+    canDeleteAccount = false,
+    canExportData = false
   ) => {
     await invoke('create_access_user', {
       request: {
@@ -248,7 +257,10 @@ export const useVaultStore = create<VaultState>((set, get) => ({
         password,
         category_permissions: categoryPermissions,
         can_view_password: canViewPassword,
-        can_create_account: canCreateAccount
+        can_create_account: canCreateAccount,
+        can_edit_account: canEditAccount,
+        can_delete_account: canDeleteAccount,
+        can_export_data: canExportData
       }
     })
     await get().fetchAccessUsers()
@@ -265,6 +277,9 @@ export const useVaultStore = create<VaultState>((set, get) => ({
         category_permissions: user.category_permissions,
         can_view_password: user.can_view_password,
         can_create_account: user.can_create_account,
+        can_edit_account: user.can_edit_account,
+        can_delete_account: user.can_delete_account,
+        can_export_data: user.can_export_data,
       }
     })
     await get().fetchAccessUsers()

@@ -40,7 +40,6 @@ interface SidebarProps {
   activeCategory: string
   onCategoryChange: (id: string) => void
   onCreateAccount: () => void
-  onManageCustomers: () => void
   onManageTypes: () => void
   onManageAccessUsers: () => void
   onOpenSettings: () => void
@@ -75,7 +74,6 @@ export function Sidebar({
   activeCategory,
   onCategoryChange,
   onCreateAccount,
-  onManageCustomers,
   onManageTypes,
   onManageAccessUsers,
   onOpenSettings,
@@ -125,13 +123,6 @@ export function Sidebar({
           <p className="px-3 text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-2">
             {t(language, 'Vault Management', 'Quản lý kho')}
           </p>
-          <button
-            onClick={onManageCustomers}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-text-secondary hover:text-text-primary hover:bg-white/8 transition-all text-left"
-          >
-            <Users className="w-4 h-4" />
-            <span className="text-sm font-medium">{t(language, 'Customer Management', 'Quản lý khách hàng')}</span>
-          </button>
           <button
             onClick={() => setShowAuditModal(true)}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-text-secondary hover:text-text-primary hover:bg-white/8 transition-all text-left"

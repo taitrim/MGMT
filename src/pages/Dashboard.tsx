@@ -26,6 +26,7 @@ export function Dashboard() {
     fetchCustomers,
     fetchStats,
     searchAccounts,
+    exportVaultVersioned,
     stats,
     isLoading,
   } = useVaultStore()
@@ -74,6 +75,21 @@ export function Dashboard() {
       clearInterval(sessionCheck)
     }
   }, [fetchAccounts, fetchAccountTypes, fetchCustomers, fetchStats, extendSession, checkSession, loadStorageInfo, checkDbHealth])
+
+  useEffect(() => {
+    const enabled = localStorage.getItem('auto_backup_enabled') === '1'
+    const backupDir = (localStorage.getItem('auto_backup_dir') || '').trim()
+    const minutes = Math.max(10, Number(localStorage.getItem('auto_backup_minutes') || '60'))
+    if (!enabled || !backupDir) return
+    const interval = setInterval(async () => {
+      try {
+        await exportVaultVersioned(backupDir, 10)
+      } catch (e) {
+        console.error('Auto backup failed:', e)
+      }
+    }, minutes * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [exportVaultVersioned])
 
   useEffect(() => {
     if (activeCategory === 'customers' && !selectedCustomerId && customers.length > 0) {
@@ -167,10 +183,20 @@ export function Dashboard() {
   const maxTypeCount = topTypes.length > 0 ? Math.max(...topTypes.map((x) => x[1])) : 1
   const typeNameMap = new Map(accountTypes.map((t) => [t.id, t.name]))
   const typeColorMap = new Map(accountTypes.map((t) => [t.id, t.color || '#22c55e']))
+  const customerNameMap = new Map(customers.map((c) => [c.id, c.name]))
   const totalItems = filteredAccounts.length
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize))
   const safePage = Math.min(currentPage, totalPages)
   const pagedAccounts = filteredAccounts.slice((safePage - 1) * pageSize, safePage * pageSize)
+  const groupedAccounts = pagedAccounts.reduce<Record<string, Record<string, typeof pagedAccounts>>>((acc, item) => {
+    const customerKey = item.customer_id ? (customerNameMap.get(item.customer_id) || 'Khách hàng khác') : 'Tài khoản cá nhân'
+    const typeKey = item.account_type_id || 'other'
+    if (!acc[customerKey]) acc[customerKey] = {}
+    if (!acc[customerKey][typeKey]) acc[customerKey][typeKey] = []
+    acc[customerKey][typeKey].push(item)
+    return acc
+  }, {})
+  const groupedCustomerEntries = Object.entries(groupedAccounts).sort((a, b) => a[0].localeCompare(b[0]))
 
   const toggleSelected = (id: string) => {
     const next = new Set(selectedIds)
@@ -232,7 +258,6 @@ export function Dashboard() {
         activeCategory={activeCategory}
         onCategoryChange={setActiveCategory}
         onCreateAccount={() => setShowCreateModal(true)}
-        onManageCustomers={() => setShowCustomerModal(true)}
         onManageTypes={() => setShowTypeModal(true)}
         onManageAccessUsers={() => setShowAccessUserModal(true)}
         onOpenSettings={() => setShowSettingsModal(true)}
@@ -401,6 +426,7 @@ export function Dashboard() {
               onSelectCustomer={setSelectedCustomerId}
               accounts={customerAccounts}
               onSelectAccount={(account) => useVaultStore.getState().selectAccount(account)}
+              onOpenManageCustomers={() => setShowCustomerModal(true)}
             />
           )}
 
@@ -424,13 +450,43 @@ export function Dashboard() {
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.18 }}
               >
-                <AccountList
-                  accounts={pagedAccounts}
-                  viewMode={viewMode}
-                  onSelectAccount={(account) => useVaultStore.getState().selectAccount(account)}
-                  selectedIds={selectedIds}
-                  onToggleSelected={toggleSelected}
-                />
+                <div className="space-y-4">
+                  {groupedCustomerEntries.map(([customerName, typeGroups]) => (
+                    <div key={customerName} className="surface-card p-4 space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <h3 className="text-sm font-semibold text-text-primary">{customerName}</h3>
+                        <span className="text-xs text-text-tertiary">
+                          {Object.values(typeGroups).reduce((sum, arr) => sum + arr.length, 0)} mục
+                        </span>
+                      </div>
+                      <div className="space-y-3">
+                        {Object.entries(typeGroups)
+                          .sort((a, b) => (typeNameMap.get(a[0]) || a[0]).localeCompare(typeNameMap.get(b[0]) || b[0]))
+                          .map(([typeId, items]) => (
+                            <div key={`${customerName}-${typeId}`} className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className="inline-block w-2.5 h-2.5 rounded-full"
+                                  style={{ backgroundColor: typeColorMap.get(typeId) || '#22c55e' }}
+                                />
+                                <p className="text-xs font-medium text-text-secondary">
+                                  {typeNameMap.get(typeId) || (typeId === 'other' ? 'Khác' : typeId)}
+                                </p>
+                                <span className="text-[11px] text-text-tertiary">({items.length})</span>
+                              </div>
+                              <AccountList
+                                accounts={items}
+                                viewMode={viewMode}
+                                onSelectAccount={(account) => useVaultStore.getState().selectAccount(account)}
+                                selectedIds={selectedIds}
+                                onToggleSelected={toggleSelected}
+                              />
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </motion.div>
             </AnimatePresence>
           ) : null}

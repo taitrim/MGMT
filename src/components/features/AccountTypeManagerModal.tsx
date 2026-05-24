@@ -77,7 +77,7 @@ export function AccountTypeManagerModal({ onClose }: Props) {
         options: (f.field_type === 'select' || f.field_type === 'multiselect')
           ? (f.options || []).map((o) => o.trim()).filter(Boolean)
           : null,
-        field_group: f.field_group || null,
+        field_group: f.field_type === 'password' ? 'detail' : (f.field_group || null),
       }))
 
     if (cleaned.length === 0) {
@@ -95,10 +95,6 @@ export function AccountTypeManagerModal({ onClose }: Props) {
 
   const remove = async () => {
     if (!selectedId) return
-    if (selectedType?.is_builtin) {
-      setError('Không thể xóa loại tài khoản có sẵn trong hệ thống')
-      return
-    }
     await deleteAccountType(selectedId)
     resetNew()
   }
@@ -229,23 +225,35 @@ export function AccountTypeManagerModal({ onClose }: Props) {
                     <div className="col-span-3">
                       <SearchableSelect
                         value={f.field_type}
-                        onChange={(v) => setFields((prev) => prev.map((x, idx) => idx === i ? { ...x, field_type: v } : x))}
+                        onChange={(v) => setFields((prev) => prev.map((x, idx) => {
+                          if (idx !== i) return x
+                          if (v === 'password') {
+                            return { ...x, field_type: v, field_group: 'detail' }
+                          }
+                          return { ...x, field_type: v }
+                        }))}
                         options={FIELD_TYPES.map((t) => ({ value: t, label: t }))}
                         searchPlaceholder="Tìm kiểu dữ liệu..."
                       />
                     </div>
                     <div className="col-span-2">
-                      <SearchableSelect
-                        value={f.field_group || ''}
-                        onChange={(v) => setFields((prev) => prev.map((x, idx) => idx === i ? { ...x, field_group: (v || null) as FieldDefinition['field_group'] } : x))}
-                        options={[
-                          { value: '', label: 'Tự động' },
-                          { value: 'identity', label: 'Danh tính' },
-                          { value: 'connection', label: 'Kết nối' },
-                          { value: 'detail', label: 'Chi tiết' },
-                        ]}
-                        searchPlaceholder="Nhóm hiển thị..."
-                      />
+                      {f.field_type === 'password' ? (
+                        <div className="w-full rounded-2xl px-4 py-2.5 text-sm text-amber-300 bg-amber-500/10 border border-amber-500/30">
+                          Mật khẩu (cố định)
+                        </div>
+                      ) : (
+                        <SearchableSelect
+                          value={f.field_group || ''}
+                          onChange={(v) => setFields((prev) => prev.map((x, idx) => idx === i ? { ...x, field_group: (v || null) as FieldDefinition['field_group'] } : x))}
+                          options={[
+                            { value: '', label: 'Tự động' },
+                            { value: 'identity', label: 'Danh tính' },
+                            { value: 'connection', label: 'Kết nối' },
+                            { value: 'detail', label: 'Chi tiết' },
+                          ]}
+                          searchPlaceholder="Nhóm hiển thị..."
+                        />
+                      )}
                     </div>
                     <label className="col-span-1 text-xs text-text-secondary"><input type="checkbox" checked={f.required} onChange={(e) => setFields((prev) => prev.map((x, idx) => idx === i ? { ...x, required: e.target.checked } : x))} /> Bắt buộc</label>
                     <label className="col-span-1 text-xs text-text-secondary"><input type="checkbox" checked={f.encrypted} onChange={(e) => setFields((prev) => prev.map((x, idx) => idx === i ? { ...x, encrypted: e.target.checked } : x))} /> Mã hoá</label>
@@ -268,7 +276,7 @@ export function AccountTypeManagerModal({ onClose }: Props) {
             {error && <p className="text-sm text-red-400">{error}</p>}
           </div>
           <div className="p-4 border-t border-border-subtle flex justify-between">
-            <button onClick={remove} disabled={!selectedId || !!selectedType?.is_builtin} className="px-3 py-2 rounded-lg bg-red-500/20 text-red-300 disabled:opacity-40">Xóa loại</button>
+            <button onClick={remove} disabled={!selectedId} className="px-3 py-2 rounded-lg bg-red-500/20 text-red-300 disabled:opacity-40">Xóa loại</button>
             <button onClick={save} className="px-4 py-2 rounded-lg bg-accent-primary text-bg-primary">Lưu</button>
           </div>
         </div>
